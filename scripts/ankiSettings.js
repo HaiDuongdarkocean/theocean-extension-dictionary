@@ -21,7 +21,7 @@ export async function loadAnkiConfig() {
   });
 }
 
-async function saveAnkiConfig(config) {
+export async function saveAnkiConfig(config) {
   return new Promise((resolve) => {
     chrome.storage.sync.set({ ankiConfig: config }, () => {
       resolve(true);
@@ -29,7 +29,7 @@ async function saveAnkiConfig(config) {
   });
 }
 
-function validateAnkiConfig(config) {
+export function validateAnkiConfig(config) {
   if (!config.deckName) return false;
   if (!config.modelName) return false;
   if (!Array.isArray(config.tags)) return false;
@@ -49,17 +49,17 @@ export async function ankiInvoke(action, params = {}) {
   return response.json();
 }
 
-async function getDeckNames() {
+export async function getDeckNames() {
   const result = await ankiInvoke("deckNames");
   return result.result || [];
 }
 
-async function getModelNames() {
+export async function getModelNames() {
   const result = await ankiInvoke("modelNames");
   return result.result || [];
 }
 
-async function getModelFieldNames(modelName) {
+export async function getModelFieldNames(modelName) {
   const result = await ankiInvoke("modelFieldNames", {
     modelName
   });

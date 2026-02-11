@@ -1,5 +1,13 @@
 import { importDictionary } from "./database.js";
 
+import {
+  loadAnkiConfig,
+  saveAnkiConfig,
+  getDeckNames,
+  getModelNames,
+  getModelFieldNames,
+} from "./ankiSettings.js";
+
 function getExtensionDefaultFields() {
   return [
     "Target word",
@@ -50,23 +58,21 @@ document.addEventListener("DOMContentLoaded", () => {
     reader.readAsText(file);
   });
 
-  document.addEventListener("DOMContentLoaded", () => {
-    document.querySelectorAll(".sidebar button").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        // remove active
-        document
-          .querySelectorAll(".sidebar button")
-          .forEach((b) => b.classList.remove("active"));
+  document.querySelectorAll(".sidebar button").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      // remove active
+      document
+        .querySelectorAll(".sidebar button")
+        .forEach((b) => b.classList.remove("active"));
 
-        document
-          .querySelectorAll(".panel")
-          .forEach((p) => p.classList.remove("active"));
+      document
+        .querySelectorAll(".panel")
+        .forEach((p) => p.classList.remove("active"));
 
-        btn.classList.add("active");
+      btn.classList.add("active");
 
-        const panelId = btn.getAttribute("data-panel");
-        document.getElementById(panelId).classList.add("active");
-      });
+      const panelId = btn.getAttribute("data-panel");
+      document.getElementById(panelId).classList.add("active");
     });
   });
 });
@@ -128,16 +134,13 @@ function renderModelOptions(models) {
     select.appendChild(option);
   });
 }
-document.addEventListener("DOMContentLoaded", () => {
-  document
-    .getElementById("modelSelect")
-    .addEventListener("change", async (e) => {
-      const modelName = e.target.value;
 
-      const fields = await getModelFieldNames(modelName);
+document.getElementById("modelSelect").addEventListener("change", async (e) => {
+  const modelName = e.target.value;
 
-      renderFieldMappingTable(fields);
-    });
+  const fields = await getModelFieldNames(modelName);
+
+  renderFieldMappingTable(fields);
 });
 
 function renderFieldMappingTable(modelFields) {
