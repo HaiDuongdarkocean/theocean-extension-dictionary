@@ -1,0 +1,143 @@
+:root {
+  /* Light Mode - Facebook/Migaku Mix */
+  --yomi-bg: #ffffff;
+  --yomi-surface: #f7f8fa;
+  --yomi-primary: #0866ff;
+  --yomi-primary-soft: rgba(8, 102, 255, 0.1);
+  --yomi-text-main: #1c1e21;
+  --yomi-text-sub: #65676b;
+  --yomi-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  --yomi-border: rgba(0, 0, 0, 0.08);
+  --yomi-accent: #00c0a5; /* Màu xanh lá đặc trưng của Migaku cho từ vựng */
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    /* Dark Mode - YouTube Black */
+    --yomi-bg: #0f0f0f;
+    --yomi-surface: #272727;
+    --yomi-primary: #3ea6ff;
+    --yomi-primary-soft: rgba(62, 166, 255, 0.15);
+    --yomi-text-main: #f1f1f1;
+    --yomi-text-sub: #aaaaaa;
+    --yomi-shadow: 0 16px 32px rgba(0, 0, 0, 0.6);
+    --yomi-border: rgba(255, 255, 255, 0.1);
+  }
+}
+
+.yomitan-popup-stack {
+  position: absolute !important;
+  width: 320px !important;
+  background: var(--yomi-bg) !important;
+  border: 1px solid var(--yomi-border) !important;
+  border-radius: 12px !important;
+  box-shadow: var(--yomi-shadow) !important;
+  font-family: 'Roboto', -apple-system, sans-serif !important;
+  overflow: hidden !important;
+  display: flex !important;
+  flex-direction: column !important;
+  animation: yomiPop 0.2s cubic-bezier(0.2, 0, 0.2, 1);
+  pointer-events: auto !important;
+}
+
+@keyframes yomiPop {
+  from { opacity: 0; transform: scale(0.95) translateY(10px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+/* Header kiểu Migaku: Từ vựng nổi bật */
+.yomi-header {
+  padding: 16px 16px 12px 16px !important;
+  background: linear-gradient(to bottom, var(--yomi-surface), var(--yomi-bg)) !important;
+  border-bottom: 1px solid var(--yomi-border) !important;
+}
+
+.popup-term-title {
+  font-size: 22px !important;
+  font-weight: 700 !important;
+  color: var(--yomi-primary) !important;
+  margin-bottom: 4px !important;
+  display: block !important;
+}
+
+.yomi-pronunciation {
+  font-family: 'Lucida Sans Unicode', sans-serif !important;
+  color: var(--yomi-text-sub) !important;
+  font-size: 14px !important;
+}
+
+/* Body: Typography sạch sẽ như YouTube */
+.definition-container {
+  padding: 12px 16px !important;
+  max-height: 280px !important;
+  overflow-y: auto !important;
+  font-size: 15px !important;
+  line-height: 1.6 !important;
+  color: var(--yomi-text-main) !important;
+}
+
+/* Kiểu dáng cho các tag như [noun], [verb] */
+.yomi-tag {
+  display: inline-block !important;
+  padding: 2px 6px !important;
+  background: var(--yomi-primary-soft) !important;
+  color: var(--yomi-primary) !important;
+  border-radius: 4px !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  margin-right: 6px !important;
+  text-transform: uppercase !important;
+}
+
+/* Scrollbar tinh tế */
+.definition-container::-webkit-scrollbar {
+  width: 4px !important;
+}
+.definition-container::-webkit-scrollbar-thumb {
+  background: var(--yomi-border) !important;
+  border-radius: 10px !important;
+}
+
+/* 1. Sửa lại Header để chứa được Tag dài */
+.yomi-header {
+    padding: 16px !important;
+    display: flex !important;
+    flex-direction: column !important; /* Đổi sang column để tiêu đề và ghi chú gốc không đè nhau */
+    gap: 4px !important;
+}
+
+/* 2. Tiêu đề chính */
+.popup-term-title {
+    font-size: 24px !important; /* Tăng độ đậm chất Migaku */
+    line-height: 1.2 !important;
+    color: var(--yomi-primary) !important;
+    word-break: break-word !important;
+}
+
+/* 3. Dòng thông tin "Gốc của..." - Nhỏ lại và tinh tế hơn */
+.yomi-origin-note {
+    font-size: 13px !important;
+    color: var(--yomi-text-sub) !important;
+    font-style: italic !important;
+    margin-bottom: 4px !important;
+    display: block !important;
+}
+
+/* 4. Sửa Tag - Quan trọng nhất */
+.yomi-tag {
+    display: inline-block !important;
+    padding: 2px 8px !important;
+    background: var(--yomi-primary-soft) !important;
+    color: var(--yomi-primary) !important;
+    border-radius: 4px !important;
+    font-size: 10px !important; /* Nhỏ lại cho chuyên nghiệp */
+    font-weight: 700 !important;
+    text-transform: uppercase !important;
+    
+    /* Chống tràn cho tag quá dài */
+    max-width: fit-content !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important; 
+    border: 1px solid var(--yomi-primary);
+}

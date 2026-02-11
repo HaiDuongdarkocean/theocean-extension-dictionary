@@ -1,0 +1,55 @@
+{
+    "manifest_version": 3,
+    "name": "Yomitan Simulate Pro",
+    "version": "1.0",
+    "description": "Mô phỏng tra từ điển bằng cách di chuột như Yomitan",
+    "permissions": [
+        "storage"
+    ],
+    "background": {
+        "service_worker": "scripts/background.js",
+        "type": "module"
+    },
+    "action": {
+        "default_popup": "popup.html"
+    },
+    "content_scripts": [
+        {
+            "matches": [
+                "<all_urls>"
+            ],
+            "js": [
+                "scripts/ankiSettings.js",
+                "scripts/options.js",
+                "scripts/irregularData.js",
+                "scripts/regularRules.js",
+                "scripts/audioManager.js",
+                "scripts/popupDictionary.js"
+            ],
+            "css": [
+                "style/popupDictionary.css"
+            ],
+            "all_frames": true
+        }
+    ],
+    "web_accessible_resources": [
+        {
+            "resources": [
+                "dictionary.json"
+            ],
+            "matches": [
+                "<all_urls>"
+            ]
+        }
+    ],
+    "options_ui": {
+        "page": "options.html",
+        "open_in_tab": true
+    },
+    "host_permissions": [
+        "https://forvo.com/*",
+        "https://audio00.forvo.com/*",
+        "https://audio12.forvo.com/*",
+        "http://127.0.0.1:8765/"
+    ]
+}
