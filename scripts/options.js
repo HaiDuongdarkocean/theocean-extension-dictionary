@@ -1,3 +1,5 @@
+import { importDictionary } from "./database.js";
+
 function getExtensionDefaultFields() {
   return [
     "Target word",

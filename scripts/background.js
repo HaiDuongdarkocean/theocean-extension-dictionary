@@ -1,7 +1,7 @@
 // background.js
 // Lưu ý: Đường dẫn phải chính xác tới file database.js
 import { getDefinition } from "./database.js";
-import { loadAnkiConfig, ankiInvoke } from "./ankiSettings.js";
+// import { loadAnkiConfig, ankiInvoke } from "./ankiSettings.js";
 
 console.log("Background Service Worker đang chạy...");
 

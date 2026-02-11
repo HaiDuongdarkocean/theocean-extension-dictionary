@@ -410,7 +410,17 @@ document.addEventListener("mousemove", (event) => {
   // 2. QUẢN LÝ TRA TỪ (Lookup)
   clearTimeout(lookupTimer);
   lookupTimer = setTimeout(async () => {
-    const range = document.caretRangeFromPoint(event.clientX, event.clientY);
+    let range = null;
+    if (typeof document.caretRangeFromPoint === "function") {
+      range = document.caretRangeFromPoint(event.clientX, event.clientY);
+    } else if (typeof document.caretPositionFromPoint === "function") {
+      const pos = document.caretPositionFromPoint(event.clientX, event.clientY);
+      if (pos && pos.offsetNode) {
+        range = document.createRange();
+        range.setStart(pos.offsetNode, pos.offset);
+        range.collapse(true);
+      }
+    }
 
     // DÒNG KIỂM TRA ĐÂY:
     if (range) {

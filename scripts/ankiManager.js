@@ -1,4 +1,4 @@
-import { loadAnkiConfig, ankiInvoke } from "./ankiSettings.js";
+// import { loadAnkiConfig, ankiInvoke } from "./ankiSettings.js";
 
 function buildFieldsFromMapping(extensionData, config) {
 
@@ -96,8 +96,8 @@ async function addNoteToAnki(extensionData) {
   }
 }
 
-export {
-    addNoteToAnki,
-    buildFieldsFromMapping,
-    buildNoteObject
-}
+// export {
+//     addNoteToAnki,
+//     buildFieldsFromMapping,
+//     buildNoteObject
+// }
