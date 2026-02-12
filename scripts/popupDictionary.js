@@ -1,3 +1,5 @@
+console.log("popupDictionary.js loaded");
+
 // Chuyển đổi thành Map để đạt tốc độ O(1)
 const dictionary = new Map();
 
@@ -271,6 +273,20 @@ function showPopup(x, y, data, level) {
             </div>
         </div>
 
+        <div class="yomi-image-section" style="margin-top: 10px; border-top: 1px solid #eee; padding-top: 10px;">
+          <div class="yomi-image-gallery" style="display: flex; flex-wrap: wrap; gap: 5px; justify-content: center;">
+            </div>
+          <div class="yomi-image-controls" style="text-align: center; margin-top: 5px;">
+            <span class="yomi-load-more-img" style="font-size: 11px; color: #0078ff; cursor: pointer; display: none;">Xem thêm ảnh...</span>
+          </div>
+        </div>
+
+        <div class="yomi-sentence-container" style="padding: 10px 16px; font-style: italic; font-size: 13px; color: #555; border-top: 1px solid #eee;">
+          <div>${data.sentence}</div>
+          ${data.sentenceTranslation ? `<div style="color: #666; margin-top: 4px;">${data.sentenceTranslation}</div>` : ""}
+        </div>
+
+
         <div class="definition-container">
             <div class="yomi-definition-text">${data.definition}</div>
         </div>
@@ -356,8 +372,6 @@ function showPopup(x, y, data, level) {
   newPopup._keyHandler = keyHandler;
 
   // QUAN TRỌNG: Khi đóng popup phải gỡ sự kiện phím tắt
-  // (Con nhớ thêm dòng này vào hàm removePopup)
-  // document.removeEventListener('keydown', keyHandler);
 
   // --- GIẢI THUẬT TÍNH VỊ TRÍ CHỐNG TRÀN ---
   const popupWidth = 300; // Chiều rộng cố định hoặc đo bằng newPopup.offsetWidth
@@ -392,6 +406,68 @@ function showPopup(x, y, data, level) {
   newPopup.style.top = `${finalY}px`;
   newPopup.style.visibility = "visible"; // Hiển thị lại sau khi đã căn chỉnh
   newPopup.style.zIndex = (10000 + level).toString();
+
+  //-----------------------
+  // --- ĐOẠN THÊM MỚI: Ảnh ---
+  // Trong showPopup...
+
+  let allImageUrls = [];
+  let visibleImageCount = 0;
+  let selectedImageUrl = null; // Biến lưu ảnh người dùng chọn
+
+  const gallery = newPopup.querySelector(".yomi-image-gallery");
+  const loadMoreBtn = newPopup.querySelector(".yomi-load-more-img");
+
+  function renderImages() {
+    const nextBatch = allImageUrls.slice(
+      visibleImageCount,
+      visibleImageCount + 3,
+    );
+    nextBatch.forEach((url) => {
+      const img = document.createElement("img");
+      img.src = url;
+      img.className = "yomi-thumb";
+      img.style =
+        "width: 80px; height: 80px; object-fit: cover; border-radius: 4px; cursor: pointer; border: 2px solid transparent;";
+
+      // Sự kiện khi nhấn chọn ảnh
+      img.onclick = () => {
+        newPopup
+          .querySelectorAll(".yomi-thumb")
+          .forEach((i) => (i.style.borderColor = "transparent"));
+        img.style.borderColor = "#0078ff"; // Highlight ảnh được chọn
+        selectedImageUrl = url;
+        data.image = url; // Cập nhật vào data để Anki lấy đúng ảnh này
+        console.log("Đã chọn ảnh để thêm Anki:", url);
+      };
+
+      gallery.appendChild(img);
+    });
+
+    visibleImageCount += nextBatch.length;
+
+    // Hiện/Ẩn nút "Xem thêm"
+    if (visibleImageCount < allImageUrls.length) {
+      const remaining = allImageUrls.length - visibleImageCount;
+      loadMoreBtn.innerText = `+${remaining} ảnh (Xem thêm)`;
+      loadMoreBtn.style.display = "inline";
+    } else {
+      loadMoreBtn.style.display = "none";
+    }
+  }
+
+  // Gọi lấy dữ liệu
+  chrome.runtime.sendMessage(
+    { action: "fetchImages", term: data.term },
+    (res) => {
+      if (res && res.success && res.urls.length > 0) {
+        allImageUrls = res.urls;
+        renderImages(); // Hiện 3 cái đầu
+      }
+    },
+  );
+
+  loadMoreBtn.onclick = () => renderImages();
 
   popupStack.push(newPopup);
 }
@@ -519,6 +595,32 @@ document.addEventListener("mousemove", (event) => {
       sentence.substring(relativeOffset, relativeOffset + 20),
     );
     console.log("Calculated word relativeOffset:", relativeOffset);
+
+    // --- ĐOẠN THÊM MỚI: DỊCH CÂU ---
+    // 1. Load config để xem user có bật "enableTranslate" không
+    const config = await new Promise((resolve) => {
+      chrome.storage.sync.get(["ankiConfig"], (res) =>
+        resolve(res.ankiConfig || {}),
+      );
+    });
+
+    if (config.enableTranslate && sentence) {
+      // Gửi tin nhắn nhờ Background dịch hộ
+      const translationResult = await new Promise((resolve) => {
+        chrome.runtime.sendMessage(
+          { action: "translateSentence", text: sentence },
+          resolve,
+        );
+      });
+
+      if (translationResult && translationResult.success) {
+        // Lưu bản dịch vào object để tý nữa hiển thị và lưu Anki
+        infoOfSentenceAndWord.sentenceTranslation = translationResult.text;
+      } else {
+        infoOfSentenceAndWord.sentenceTranslation = "Xảy ra lỗi dịch";
+      }
+    }
+    // ------------------------------
 
     // KIỂM TRA TRÙNG TỪ
     const isAlreadyShown = popupStack.some(

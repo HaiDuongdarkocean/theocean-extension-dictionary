@@ -1,5 +1,10 @@
+/**
+ * options.js 
+ * Quản lý toàn bộ giao diện cài đặt của Yomitan Pro
+ */
 import { importDictionary } from "./database.js";
-
+import { getConfig, saveConfig } from "./configManager.js";
+import { TTSModule } from "./ttsModule.js";
 import {
   loadAnkiConfig,
   saveAnkiConfig,
@@ -8,290 +13,209 @@ import {
   getModelFieldNames,
 } from "./ankiSettings.js";
 
-function getExtensionDefaultFields() {
-  return [
-    "Target word",
-    "Definition",
-    "Sentence",
-    "Sentence translation",
-    "Example sentences",
-    "Notes",
-    "Images",
-    "Word audio",
-    "Sentence audio",
-  ];
-}
+// --- 1. KHỞI TẠO CÁC BIẾN CẤU CẤU HÌNH MẶC ĐỊNH ---
+const EXTENSION_FIELDS = [
+  "Target word",
+  "Definition",
+  "Sentence",
+  "Sentence translation",
+  "Images",
+  "Word audio",
+  "Sentence audio",
+];
 
-document.addEventListener("DOMContentLoaded", () => {
-  document.getElementById("importBtn").addEventListener("click", async () => {
-    const fileInput = document.getElementById("dictFile");
-    const status = document.getElementById("status");
+// --- 2. QUẢN LÝ TABS (SIDEBAR) ---
+function initTabs() {
+  const buttons = document.querySelectorAll(".sidebar button");
+  const panels = document.querySelectorAll(".panel");
 
-    if (fileInput.files.length === 0) {
-      alert("Vui lòng chọn một file JSON trước!");
-      return;
-    }
-
-    const file = fileInput.files[0];
-    const reader = new FileReader();
-
-    status.innerText = "Đang đọc file...";
-
-    reader.onload = async (e) => {
-      try {
-        // 1. Chuyển nội dung file từ chuỗi văn bản sang JSON (Array)
-        const jsonData = JSON.parse(e.target.result);
-
-        status.innerText = "Đang nạp vào IndexedDB (Vui lòng đợi)...";
-
-        // 2. Gọi hàm importDictionary mà mình đã viết ở database.js
-        // Vì database.js được nạp trước nên hàm này đã có sẵn
-        await importDictionary(jsonData);
-
-        status.innerText = "Chúc mừng! Đã nạp xong " + jsonData.length + " từ.";
-      } catch (err) {
-        console.error(err);
-        status.innerText = "Lỗi: File không đúng định dạng JSON.";
-      }
-    };
-
-    reader.readAsText(file);
-  });
-
-  document.querySelectorAll(".sidebar button").forEach((btn) => {
+  buttons.forEach((btn) => {
     btn.addEventListener("click", () => {
-      // remove active
-      document
-        .querySelectorAll(".sidebar button")
-        .forEach((b) => b.classList.remove("active"));
+      // Xóa trạng thái active cũ
+      buttons.forEach((b) => b.classList.remove("active"));
+      panels.forEach((p) => p.classList.remove("active"));
 
-      document
-        .querySelectorAll(".panel")
-        .forEach((p) => p.classList.remove("active"));
-
+      // Kích hoạt tab mới
       btn.classList.add("active");
-
       const panelId = btn.getAttribute("data-panel");
       document.getElementById(panelId).classList.add("active");
     });
   });
-});
+}
 
-// ===== INIT ANKI PANEL =====
-async function initAnkiPanel() {
+// --- 3. QUẢN LÝ ANKI PANEL ---
+async function setupAnkiPanel() {
+  const ankiStatus = document.getElementById("ankiStatus");
   try {
-    const decks = await getDeckNames();
-    renderDeckOptions(decks);
+    // Lấy dữ liệu từ Anki Connect
+    const [decks, models] = await Promise.all([getDeckNames(), getModelNames()]);
 
-    const models = await getModelNames();
-    renderModelOptions(models);
+    const deckSelect = document.getElementById("deckSelect");
+    const modelSelect = document.getElementById("modelSelect");
 
-    loadSavedAnkiSettings();
+    // Đổ dữ liệu vào Select
+    deckSelect.innerHTML = decks.map(d => `<option value="${d}">${d}</option>`).join("");
+    modelSelect.innerHTML = models.map(m => `<option value="${m}">${m}</option>`).join("");
+
+    // Load cài đặt đã lưu
+    const savedAnki = await loadAnkiConfig();
+    deckSelect.value = savedAnki.deckName || "";
+    modelSelect.value = savedAnki.modelName || "";
+    document.getElementById("tagsInput").value = (savedAnki.tags || []).join(",");
+
+    // Hiển thị bảng Mapping nếu đã chọn Model
+    if (savedAnki.modelName) {
+      const fields = await getModelFieldNames(savedAnki.modelName);
+      renderFieldMappingTable(fields, savedAnki.fieldMapping || {});
+    }
+
+    // Sự kiện khi thay đổi Model thì phải load lại danh sách field của Model đó
+    modelSelect.onchange = async (e) => {
+      const fields = await getModelFieldNames(e.target.value);
+      renderFieldMappingTable(fields, {});
+    };
+
+    ankiStatus.innerText = "✅ Kết nối Anki thành công.";
   } catch (err) {
-    document.getElementById("ankiStatus").innerText =
-      "❌ Không kết nối được Anki. Hãy mở Anki Desktop.";
+    console.error("Anki Error:", err);
+    ankiStatus.innerHTML = "<b style='color:red'>❌ Không kết nối được Anki. Hãy mở Anki Desktop và bật AnkiConnect.</b>";
   }
 }
 
-function generateAutoMapping(extensionFields, modelFields) {
-  const mapping = {};
-
-  extensionFields.forEach((extField) => {
-    const normalizedExt = normalizeFieldName(extField);
-
-    const match = modelFields.find(
-      (modelField) => normalizeFieldName(modelField) === normalizedExt,
-    );
-
-    if (match) {
-      mapping[extField] = match;
-    }
-  });
-
-  return mapping;
-}
-
-function renderDeckOptions(decks) {
-  const select = document.getElementById("deckSelect");
-  select.innerHTML = "";
-
-  decks.forEach((deck) => {
-    const option = document.createElement("option");
-    option.value = deck;
-    option.textContent = deck;
-    select.appendChild(option);
-  });
-}
-
-function renderModelOptions(models) {
-  const select = document.getElementById("modelSelect");
-  select.innerHTML = "";
-
-  models.forEach((model) => {
-    const option = document.createElement("option");
-    option.value = model;
-    option.textContent = model;
-    select.appendChild(option);
-  });
-}
-
-document.getElementById("modelSelect").addEventListener("change", async (e) => {
-  const modelName = e.target.value;
-
-  const fields = await getModelFieldNames(modelName);
-
-  renderFieldMappingTable(fields);
-});
-
-function renderFieldMappingTable(modelFields) {
+function renderFieldMappingTable(modelFields, savedMapping) {
   const container = document.getElementById("fieldMappingContainer");
-  container.innerHTML = "";
+  container.innerHTML = "<h4>Mapping Fields:</h4>";
 
-  const extensionFields = getExtensionDefaultFields();
-
-  const autoMapping = generateAutoMapping(extensionFields, modelFields);
-
-  extensionFields.forEach((extField) => {
+  EXTENSION_FIELDS.forEach((extField) => {
     const row = document.createElement("div");
-    row.style.marginBottom = "8px";
+    row.className = "row";
+    row.style.marginBottom = "10px";
 
     const label = document.createElement("label");
-    label.textContent = extField + " → ";
+    label.innerText = extField;
+    label.style.width = "160px";
     label.style.display = "inline-block";
-    label.style.width = "180px";
 
     const select = document.createElement("select");
-    select.dataset.extensionField = extField;
-
-    const emptyOption = document.createElement("option");
-    emptyOption.value = "";
-    emptyOption.textContent = "-- Ignore --";
-    select.appendChild(emptyOption);
-
-    modelFields.forEach((modelField) => {
-      const option = document.createElement("option");
-      option.value = modelField;
-      option.textContent = modelField;
-
-      if (autoMapping[extField] === modelField) {
-        option.selected = true;
-      }
-
-      select.appendChild(option);
-    });
+    select.dataset.extField = extField;
+    select.innerHTML = `<option value="">-- Bỏ qua (Ignore) --</option>` +
+      modelFields.map(mf => `<option value="${mf}" ${savedMapping[extField] === mf ? 'selected' : ''}>${mf}</option>`).join("");
 
     row.appendChild(label);
     row.appendChild(select);
-
     container.appendChild(row);
   });
 }
 
-function normalizeFieldName(name) {
-  return name.toLowerCase().replace(/[\s_\-]/g, "");
+// --- 4. QUẢN LÝ AUDIO & TTS PANEL ---
+async function setupAudioPanel() {
+  const config = await getConfig();
+  const voices = await TTSModule.getAvailableVoices();
+
+  // Load trạng thái Checkbox
+  document.getElementById("ttsEnabled").checked = config.tts?.enabled || false;
+  document.getElementById("enableTranslate").checked = config.translateEnabled || false;
+
+  // Hàm đổ giọng đọc vào 3 Slot
+  const populateVoice = (selectId, currentVoice) => {
+    const select = document.getElementById(selectId);
+    select.innerHTML = '<option value="">-- Mặc định hệ thống --</option>' +
+      voices.map(v => `<option value="${v.voiceName}" ${v.voiceName === currentVoice ? 'selected' : ''}>${v.voiceName} (${v.lang})</option>`).join("");
+  };
+
+  populateVoice("voice1", config.tts?.voices?.[0]);
+  populateVoice("voice2", config.tts?.voices?.[1]);
+  populateVoice("voice3", config.tts?.voices?.[2]);
 }
 
-async function loadSavedAnkiSettings() {
-  const config = await loadAnkiConfig();
+// --- 5. LOGIC LƯU TRỮ TỔNG HỢP ---
+async function handleSaveSettings(statusId) {
+  try {
+    // A. Thu thập dữ liệu TTS từ giao diện
+    const currentGeneralConfig = await getConfig();
+    const newGeneralConfig = {
+      ...currentGeneralConfig,
+      translateEnabled: document.getElementById("enableTranslate").checked,
+      tts: {
+        enabled: document.getElementById("ttsEnabled").checked,
+        voices: [
+          document.getElementById("voice1").value,
+          document.getElementById("voice2").value,
+          document.getElementById("voice3").value,
+        ]
+      }
+    };
+    await saveConfig(newGeneralConfig);
 
-  document.getElementById("deckSelect").value = config.deckName || "";
-  document.getElementById("modelSelect").value = config.modelName || "";
-  document.getElementById("tagsInput").value = (config.tags || []).join(",");
+    // B. Thu thập dữ liệu Anki từ giao diện
+    const fieldMapping = {};
+    document.querySelectorAll("#fieldMappingContainer select").forEach(select => {
+      if (select.value) {
+        fieldMapping[select.dataset.extField] = select.value;
+      }
+    });
 
-  // --- THÊM 2 DÒNG NÀY ĐỂ HIỂN THỊ TRẠNG THÁI CHECKBOX ---
-  document.getElementById("enableTranslate").checked =
-    config.enableTranslate || false;
-  document.getElementById("enableLocalTTS").checked =
-    config.enableLocalTTS !== false; // Mặc định là true nếu chưa cài đặt
+    const ankiConfig = {
+      deckName: document.getElementById("deckSelect").value,
+      modelName: document.getElementById("modelSelect").value,
+      tags: document.getElementById("tagsInput").value.split(",").map(t => t.trim()).filter(Boolean),
+      fieldMapping: fieldMapping
+    };
+    await saveAnkiConfig(ankiConfig);
 
-  if (config.modelName) {
-    const fields = await getModelFieldNames(config.modelName);
-    renderFieldMappingTable(fields);
+    // Hiển thị thông báo thành công
+    const statusEl = document.getElementById(statusId);
+    statusEl.innerText = "✅ Đã lưu tất cả cài đặt!";
+    statusEl.style.color = "green";
+    setTimeout(() => (statusEl.innerText = ""), 2000);
+    
+  } catch (err) {
+    alert("Có lỗi khi lưu: " + err.message);
   }
 }
 
-document.addEventListener("DOMContentLoaded", () => {
-  document
-    .getElementById("saveAnkiSettings")
-    .addEventListener("click", async () => {
-      const deckName = document.getElementById("deckSelect").value;
-      const modelName = document.getElementById("modelSelect").value;
-      const tags = document
-        .getElementById("tagsInput")
-        .value.split(",")
-        .map((t) => t.trim())
-        .filter(Boolean);
+// --- 6. QUẢN LÝ NHẬP TỪ ĐIỂN (DICTIONARY) ---
+function initDictionaryPanel() {
+  const importBtn = document.getElementById("importBtn");
+  const dictFile = document.getElementById("dictFile");
+  const status = document.getElementById("status");
 
-      const fieldMapping = {};
+  importBtn.onclick = async () => {
+    if (!dictFile.files.length) return alert("Chọn file JSON đã con!");
+    
+    const file = dictFile.files[0];
+    const reader = new FileReader();
+    status.innerText = "🔄 Đang đọc file...";
 
-      document
-        .querySelectorAll("#fieldMappingContainer select")
-        .forEach((select) => {
-          const extField = select.dataset.extensionField;
-          const modelField = select.value;
-
-          if (modelField) {
-            fieldMapping[extField] = modelField;
-          }
-        });
-
-      // --- CẬP NHẬT Ở ĐÂY ---
-      const config = {
-        deckName,
-        modelName,
-        tags,
-        autoFieldMapping: true,
-        fieldMapping,
-        // Lấy giá trị từ 2 checkbox mới
-        enableTranslate: document.getElementById("enableTranslate").checked,
-        enableLocalTTS: document.getElementById("enableLocalTTS").checked,
-      };
-
-      await saveAnkiConfig(config);
-      document.getElementById("ankiStatus").innerText =
-        "✅ Saved successfully!";
-    });
-});
-
-// Thêm hàm này vào options.js
-async function handleSaveAllSettings() {
-    const config = await loadAnkiConfig(); // Lấy config hiện tại để tránh mất dữ liệu cũ
-
-    // Lấy dữ liệu từ Anki Panel
-    config.deckName = document.getElementById("deckSelect").value;
-    config.modelName = document.getElementById("modelSelect").value;
-    config.tags = document.getElementById("tagsInput").value.split(",").map(t => t.trim()).filter(Boolean);
-
-    const fieldMapping = {};
-    document.querySelectorAll("#fieldMappingContainer select").forEach((select) => {
-        const extField = select.dataset.extensionField;
-        const modelField = select.value;
-        if (modelField) fieldMapping[extField] = modelField;
-    });
-    config.fieldMapping = fieldMapping;
-
-    // Lấy dữ liệu từ Audio Panel (Checkbox)
-    config.enableTranslate = document.getElementById("enableTranslate").checked;
-    config.enableLocalTTS = document.getElementById("enableLocalTTS").checked;
-
-    // Lưu lại
-    await saveAnkiConfig(config);
-    return true;
+    reader.onload = async (e) => {
+      try {
+        const jsonData = JSON.parse(e.target.result);
+        status.innerText = "🔄 Đang nạp vào IndexedDB...";
+        await importDictionary(jsonData);
+        status.innerText = `✅ Thành công! Đã nạp ${jsonData.length} từ.`;
+      } catch (err) {
+        status.innerText = "❌ Lỗi: File không đúng định dạng JSON.";
+      }
+    };
+    reader.readAsText(file);
+  };
 }
 
-document.addEventListener("DOMContentLoaded", () => {
-    // Nút Save ở tab Anki
-    document.getElementById("saveAnkiSettings").addEventListener("click", async () => {
-        const ok = await handleSaveAllSettings();
-        if (ok) document.getElementById("ankiStatus").innerText = "✅ Saved successfully!";
-    });
+// --- 7. KHỞI CHẠY (MAIN ENTRY POINT) ---
+document.addEventListener("DOMContentLoaded", async () => {
+  // Chạy các thành phần giao diện
+  initTabs();
+  initDictionaryPanel();
+  
+  // Nạp dữ liệu vào các Panel
+  // Sư phụ bọc trong try-catch để nếu Anki lỗi thì TTS vẫn load được
+  await setupAnkiPanel().catch(e => console.log("Anki Panel load fail"));
+  await setupAudioPanel().catch(e => console.log("Audio Panel load fail"));
 
-    // Nút Save ở tab Audio (Mới thêm)
-    document.getElementById("saveAudioSettings").addEventListener("click", async () => {
-        const ok = await handleSaveAllSettings();
-        if (ok) document.getElementById("audioStatus").innerText = "✅ Saved successfully!";
-    });
-    
-    // Đừng quên gọi hàm khởi tạo panel
-    initAnkiPanel();
+  // Gán sự kiện cho các nút Lưu
+  const btnAnkiSave = document.getElementById("saveAnkiSettings");
+  if (btnAnkiSave) btnAnkiSave.onclick = () => handleSaveSettings("ankiStatus");
+
+  const btnAudioSave = document.getElementById("saveBtn"); // Nút lưu ở phần Audio
+  if (btnAudioSave) btnAudioSave.onclick = () => handleSaveSettings("status");
 });

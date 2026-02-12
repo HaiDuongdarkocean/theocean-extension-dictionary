@@ -4,7 +4,10 @@
     "version": "1.0",
     "description": "Mô phỏng tra từ điển bằng cách di chuột như Yomitan",
     "permissions": [
-        "storage"
+        "tts",
+        "storage",
+        "activeTab",
+        "scripting"
     ],
     "background": {
         "service_worker": "scripts/background.js",

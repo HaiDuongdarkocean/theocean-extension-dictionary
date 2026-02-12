@@ -52,6 +52,46 @@
       .panel.active {
         display: block;
       }
+
+      body {
+        font-family: sans-serif;
+        padding: 20px;
+        color: #333;
+      }
+      .section {
+        margin-bottom: 25px;
+        border: 1px solid #eee;
+        padding: 15px;
+        border-radius: 8px;
+      }
+      h2 {
+        margin-top: 0;
+        color: #0078ff;
+      }
+      .row {
+        margin-bottom: 10px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      select {
+        padding: 5px;
+        min-width: 200px;
+      }
+      .hint {
+        font-size: 12px;
+        color: #777;
+        margin-top: -5px;
+        margin-bottom: 10px;
+      }
+      #saveBtn {
+        background: #0078ff;
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 4px;
+        cursor: pointer;
+      }
     </style>
   </head>
   <body>
@@ -124,38 +164,41 @@
 
           <hr style="margin: 15px 0; border: 0; border-top: 1px solid #eee" />
 
-          <h3>Âm thanh (TTS Local)</h3>
-          <label
-            style="
-              display: flex;
-              align-items: center;
-              gap: 10px;
-              cursor: pointer;
-            "
-          >
-            <input type="checkbox" id="enableLocalTTS" />
-            <span>Sử dụng TTS của trình duyệt khi không có Forvo</span>
-          </label>
-          <p style="font-size: 12px; color: #666">
-            (Chạy offline, hỗ trợ tốt nhất trên Edge và Chrome)
-          </p>
-        </div>
+          <!-- TTS -->
+          <h2>Cài đặt Extension</h2>
 
-        <div style="margin-top: 20px">
-          <button
-            id="saveAudioSettings"
-            style="
-              padding: 10px 20px;
-              background: #0078ff;
-              color: white;
-              border: none;
-              border-radius: 4px;
-              cursor: pointer;
-            "
-          >
-            Save Audio Settings
-          </button>
-          <span id="audioStatus" style="margin-left: 10px"></span>
+          <div class="section">
+            <h3>🔊 Text-to-Speech (TTS)</h3>
+            <div class="row">
+              <input type="checkbox" id="ttsEnabled" />
+              <label for="ttsEnabled">Kích hoạt giọng đọc câu ví dụ</label>
+            </div>
+
+            <div class="row">
+              <label>Lọc quốc gia:</label>
+              <select id="langFilter">
+                <option value="all">Tất cả</option>
+                <option value="en-US">English (US)</option>
+                <option value="en-GB">English (UK)</option>
+              </select>
+            </div>
+
+            <div class="row">
+              <label>Giọng đọc 1 (Mặc định):</label>
+              <select id="voice1"></select>
+            </div>
+            <div class="row">
+              <label>Giọng đọc 2:</label>
+              <select id="voice2"></select>
+            </div>
+            <div class="row">
+              <label>Giọng đọc 3:</label>
+              <select id="voice3"></select>
+            </div>
+          </div>
+
+          <button id="saveBtn">Lưu cài đặt</button>
+          <span id="status"></span>
         </div>
       </div>
     </div>
