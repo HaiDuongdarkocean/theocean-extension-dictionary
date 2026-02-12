@@ -76,17 +76,40 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 });
 
 async function handleAddToAnki(extensionData) {
-
   const config = await loadAnkiConfig();
 
   const fields = buildFieldsFromMapping(extensionData, config);
+  console.log("Background::Built fields for Anki note:", fields);
+
+  // ===== WORD AUDIO =====
+  if (extensionData.audio) {
+    console.log("--> Phát hiện có Audio URL, bắt đầu tải..."); // Debug log
+    try {
+        const filename = `${extensionData.term}_${Date.now()}.mp3`;
+        const base64 = await downloadAudioAsBase64(extensionData.audio);
+        const soundTag = await uploadAudioToAnki(filename, base64);
+        
+        console.log("--> Upload thành công, soundTag:", soundTag); // Debug log
+
+        const audioFieldName = config.fieldMapping["Word audio"];
+        if (audioFieldName) {
+          fields[audioFieldName] = soundTag;
+        } else {
+            console.warn("--> Cảnh báo: Chưa map field 'Word audio' trong Settings");
+        }
+    } catch (e) {
+        console.error("--> Lỗi tải/upload audio:", e);
+    }
+  } else {
+      console.log("--> KHÔNG tìm thấy audio trong data gửi tới.");
+  }
 
   const note = {
     deckName: config.deckName,
     modelName: config.modelName,
     fields,
     options: { allowDuplicate: false },
-    tags: config.tags || []
+    tags: config.tags || [],
   };
 
   const result = await ankiInvoke("addNote", { note });
@@ -97,5 +120,34 @@ async function handleAddToAnki(extensionData) {
   if (result.error) {
     throw new Error(result.error);
   }
+
+  console.log("Final note fields:", fields);
 }
+
+async function downloadAudioAsBase64(url) {
+  const res = await fetch(url);
+  console.log("Download audio response:", res);
+  const blob = await res.blob();
+  console.log("Blob:", blob);
+
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    console.log("About to read blob as data URL", reader);
+    reader.onloadend = () => {
+      const base64 = reader.result.split(",")[1];
+      resolve(base64);
+    };
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function uploadAudioToAnki(filename, base64) {
+  await ankiInvoke("storeMediaFile", {
+    filename,
+    data: base64,
+  });
+
+  return `[sound:${filename}]`;
+}
+
 

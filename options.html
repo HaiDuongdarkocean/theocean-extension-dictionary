@@ -1,110 +1,165 @@
-<!DOCTYPE html>
+<!doctype html>
 <html>
-<head>
+  <head>
     <title>Yomitan Simulate Pro - Settings</title>
-    <meta charset="utf-8">
+    <meta charset="utf-8" />
     <style>
-        body {
-            margin: 0;
-            font-family: Arial, sans-serif;
-            display: flex;
-            height: 100vh;
-        }
+      body {
+        margin: 0;
+        font-family: Arial, sans-serif;
+        display: flex;
+        height: 100vh;
+      }
 
-        .sidebar {
-            width: 220px;
-            background: #1e1e1e;
-            color: white;
-            padding: 20px 10px;
-        }
+      .sidebar {
+        width: 220px;
+        background: #1e1e1e;
+        color: white;
+        padding: 20px 10px;
+      }
 
-        .sidebar h2 {
-            font-size: 16px;
-            margin-bottom: 20px;
-        }
+      .sidebar h2 {
+        font-size: 16px;
+        margin-bottom: 20px;
+      }
 
-        .sidebar button {
-            display: block;
-            width: 100%;
-            margin-bottom: 10px;
-            padding: 8px;
-            border: none;
-            background: #333;
-            color: white;
-            cursor: pointer;
-            text-align: left;
-        }
+      .sidebar button {
+        display: block;
+        width: 100%;
+        margin-bottom: 10px;
+        padding: 8px;
+        border: none;
+        background: #333;
+        color: white;
+        cursor: pointer;
+        text-align: left;
+      }
 
-        .sidebar button.active {
-            background: #0078ff;
-        }
+      .sidebar button.active {
+        background: #0078ff;
+      }
 
-        .content {
-            flex: 1;
-            padding: 30px;
-            overflow-y: auto;
-        }
+      .content {
+        flex: 1;
+        padding: 30px;
+        overflow-y: auto;
+      }
 
-        .panel {
-            display: none;
-        }
+      .panel {
+        display: none;
+      }
 
-        .panel.active {
-            display: block;
-        }
+      .panel.active {
+        display: block;
+      }
     </style>
-</head>
-<body>
-
-<div class="sidebar">
-    <h2>Settings</h2>
-    <button data-panel="dictionaryPanel" class="active">Dictionary</button>
-    <button data-panel="ankiPanel">Anki</button>
-    <button data-panel="audioPanel">Audio</button>
-</div>
-
-<div class="content">
-
-    <!-- Dictionary Panel -->
-    <div id="dictionaryPanel" class="panel active">
-        <h1>Dictionary Settings</h1>
-        <p>Chọn file JSON để nạp vào bộ nhớ:</p>
-        <input type="file" id="dictFile" accept=".json">
-        <button id="importBtn">Bắt đầu nạp</button>
-        <div id="status"></div>
+  </head>
+  <body>
+    <div class="sidebar">
+      <h2>Settings</h2>
+      <button data-panel="dictionaryPanel" class="active">Dictionary</button>
+      <button data-panel="ankiPanel">Anki</button>
+      <button data-panel="audioPanel">Audio</button>
     </div>
 
-    <!-- Anki Panel -->
-    <div id="ankiPanel" class="panel">
+    <div class="content">
+      <!-- Dictionary Panel -->
+      <div id="dictionaryPanel" class="panel active">
+        <h1>Dictionary Settings</h1>
+        <p>Chọn file JSON để nạp vào bộ nhớ:</p>
+        <input type="file" id="dictFile" accept=".json" />
+        <button id="importBtn">Bắt đầu nạp</button>
+        <div id="status"></div>
+      </div>
+
+      <!-- Anki Panel -->
+      <div id="ankiPanel" class="panel">
         <h1>Anki Settings</h1>
 
         <label>Deck:</label>
         <select id="deckSelect"></select>
-        <br><br>
+        <br /><br />
 
         <label>Model:</label>
         <select id="modelSelect"></select>
-        <br><br>
+        <br /><br />
 
         <label>Tags (comma separated):</label>
-        <input type="text" id="tagsInput">
-        <br><br>
+        <input type="text" id="tagsInput" />
+        <br /><br />
 
         <div id="fieldMappingContainer"></div>
 
         <button id="saveAnkiSettings">Save</button>
         <div id="ankiStatus"></div>
+      </div>
+
+      <!-- Audio Panel -->
+      <div id="audioPanel" class="panel">
+        <h1>Audio & Translation Settings</h1>
+
+        <div
+          style="
+            background: #f9f9f9;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #ddd;
+          "
+        >
+          <h3>Dịch thuật (Google Translate)</h3>
+          <label
+            style="
+              display: flex;
+              align-items: center;
+              gap: 10px;
+              cursor: pointer;
+            "
+          >
+            <input type="checkbox" id="enableTranslate" />
+            <span>Tự động dịch câu ví dụ sang tiếng Việt</span>
+          </label>
+          <p style="font-size: 12px; color: #666">
+            (Sử dụng Google Translate Web Endpoint - Miễn phí)
+          </p>
+
+          <hr style="margin: 15px 0; border: 0; border-top: 1px solid #eee" />
+
+          <h3>Âm thanh (TTS Local)</h3>
+          <label
+            style="
+              display: flex;
+              align-items: center;
+              gap: 10px;
+              cursor: pointer;
+            "
+          >
+            <input type="checkbox" id="enableLocalTTS" />
+            <span>Sử dụng TTS của trình duyệt khi không có Forvo</span>
+          </label>
+          <p style="font-size: 12px; color: #666">
+            (Chạy offline, hỗ trợ tốt nhất trên Edge và Chrome)
+          </p>
+        </div>
+
+        <div style="margin-top: 20px">
+          <button
+            id="saveAudioSettings"
+            style="
+              padding: 10px 20px;
+              background: #0078ff;
+              color: white;
+              border: none;
+              border-radius: 4px;
+              cursor: pointer;
+            "
+          >
+            Save Audio Settings
+          </button>
+          <span id="audioStatus" style="margin-left: 10px"></span>
+        </div>
+      </div>
     </div>
 
-    <!-- Audio Panel -->
-    <div id="audioPanel" class="panel">
-        <h1>Audio Settings</h1>
-        <p>Coming soon...</p>
-    </div>
-
-</div>
-
-<script type="module" src="scripts/options.js"></script>
-
-</body>
+    <script type="module" src="scripts/options.js"></script>
+  </body>
 </html>

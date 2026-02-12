@@ -5,8 +5,10 @@ function buildFieldsFromMapping(extensionData, config) {
   const fields = {};
 
   const mapping = config.fieldMapping || {};
+  console.log("buildFieldsFromMapping::Using mapping:", mapping);
 
   Object.keys(mapping).forEach(extField => {
+    console.log("Processing field:", extField);
 
     const modelField = mapping[extField];
 

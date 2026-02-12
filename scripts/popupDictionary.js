@@ -307,6 +307,10 @@ function showPopup(x, y, data, level) {
       // Lưu toàn bộ audio
       newPopup._audioFullList = processed.fullList;
 
+      // Luu audio anki
+      data.audio = newPopup._audioFullList?.[0]?.url;
+      console.log("infoOfSentenceAndWord with audio:", data);
+
       // Ban đầu chỉ hiển thị 3
       newPopup._audioVisibleCount = AudioConfig.maxDisplay;
 
@@ -474,7 +478,7 @@ document.addEventListener("mousemove", (event) => {
     console.log("Block text:", blockText);
     const sentence = extractFinalSentence(range);
     console.log("Extracted sentence:", sentence);
-    if (!sentence) return;
+    if (!sentence | (sentence.trim() == "")) return;
     // 1️⃣ Offset trong blockText
     const textNode = range.startContainer;
     const nodeText = textNode.textContent;
@@ -529,6 +533,7 @@ document.addEventListener("mousemove", (event) => {
     globalCloseTimer = null;
 
     let level = closestPopup ? parseInt(closestPopup.dataset.level) + 1 : 1;
+
     showPopup(event.pageX, event.pageY, infoOfSentenceAndWord, level);
   }, 150);
 });

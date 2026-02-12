@@ -198,6 +198,12 @@ async function loadSavedAnkiSettings() {
   document.getElementById("modelSelect").value = config.modelName || "";
   document.getElementById("tagsInput").value = (config.tags || []).join(",");
 
+  // --- THÊM 2 DÒNG NÀY ĐỂ HIỂN THỊ TRẠNG THÁI CHECKBOX ---
+  document.getElementById("enableTranslate").checked =
+    config.enableTranslate || false;
+  document.getElementById("enableLocalTTS").checked =
+    config.enableLocalTTS !== false; // Mặc định là true nếu chưa cài đặt
+
   if (config.modelName) {
     const fields = await getModelFieldNames(config.modelName);
     renderFieldMappingTable(fields);
@@ -229,20 +235,63 @@ document.addEventListener("DOMContentLoaded", () => {
           }
         });
 
+      // --- CẬP NHẬT Ở ĐÂY ---
       const config = {
         deckName,
         modelName,
         tags,
         autoFieldMapping: true,
         fieldMapping,
+        // Lấy giá trị từ 2 checkbox mới
+        enableTranslate: document.getElementById("enableTranslate").checked,
+        enableLocalTTS: document.getElementById("enableLocalTTS").checked,
       };
 
       await saveAnkiConfig(config);
-
       document.getElementById("ankiStatus").innerText =
         "✅ Saved successfully!";
     });
 });
+
+// Thêm hàm này vào options.js
+async function handleSaveAllSettings() {
+    const config = await loadAnkiConfig(); // Lấy config hiện tại để tránh mất dữ liệu cũ
+
+    // Lấy dữ liệu từ Anki Panel
+    config.deckName = document.getElementById("deckSelect").value;
+    config.modelName = document.getElementById("modelSelect").value;
+    config.tags = document.getElementById("tagsInput").value.split(",").map(t => t.trim()).filter(Boolean);
+
+    const fieldMapping = {};
+    document.querySelectorAll("#fieldMappingContainer select").forEach((select) => {
+        const extField = select.dataset.extensionField;
+        const modelField = select.value;
+        if (modelField) fieldMapping[extField] = modelField;
+    });
+    config.fieldMapping = fieldMapping;
+
+    // Lấy dữ liệu từ Audio Panel (Checkbox)
+    config.enableTranslate = document.getElementById("enableTranslate").checked;
+    config.enableLocalTTS = document.getElementById("enableLocalTTS").checked;
+
+    // Lưu lại
+    await saveAnkiConfig(config);
+    return true;
+}
+
 document.addEventListener("DOMContentLoaded", () => {
-  initAnkiPanel();
+    // Nút Save ở tab Anki
+    document.getElementById("saveAnkiSettings").addEventListener("click", async () => {
+        const ok = await handleSaveAllSettings();
+        if (ok) document.getElementById("ankiStatus").innerText = "✅ Saved successfully!";
+    });
+
+    // Nút Save ở tab Audio (Mới thêm)
+    document.getElementById("saveAudioSettings").addEventListener("click", async () => {
+        const ok = await handleSaveAllSettings();
+        if (ok) document.getElementById("audioStatus").innerText = "✅ Saved successfully!";
+    });
+    
+    // Đừng quên gọi hàm khởi tạo panel
+    initAnkiPanel();
 });

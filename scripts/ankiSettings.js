@@ -4,6 +4,8 @@ const DEFAULT_ANKI_CONFIG = {
   tags: ["Ocean"],
   autoFieldMapping: true,
   fieldMapping: {},
+  enableTranslate: false,
+  enableLocalTTS: true
 };
 
 export async function loadAnkiConfig() {
