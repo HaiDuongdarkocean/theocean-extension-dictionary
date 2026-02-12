@@ -1,7 +1,7 @@
 // background.js
-// Lưu ý: Đường dẫn phải chính xác tới file database.js
 import { getDefinition } from "./database.js";
-// import { loadAnkiConfig, ankiInvoke } from "./ankiSettings.js";
+import { loadAnkiConfig, ankiInvoke } from "./ankiSettings.js";
+import { buildFieldsFromMapping } from "./ankiManager.js";
 
 console.log("Background Service Worker đang chạy...");
 
@@ -85,13 +85,14 @@ async function handleAddToAnki(extensionData) {
     deckName: config.deckName,
     modelName: config.modelName,
     fields,
-    options: {
-      allowDuplicate: false
-    },
+    options: { allowDuplicate: false },
     tags: config.tags || []
   };
 
   const result = await ankiInvoke("addNote", { note });
+
+  console.log("Background::Note payload:", note);
+  console.log("Background::Anki response:", result);
 
   if (result.error) {
     throw new Error(result.error);

@@ -12,6 +12,7 @@ export async function loadAnkiConfig() {
       if (!result.ankiConfig) {
         resolve(DEFAULT_ANKI_CONFIG);
       } else {
+        console.log("Background.js::Loaded Anki config:", result.ankiConfig);
         resolve({
           ...DEFAULT_ANKI_CONFIG,
           ...result.ankiConfig

@@ -19,8 +19,7 @@
                 "<all_urls>"
             ],
             "js": [
-                "scripts/ankiManager.js",
-                "scripts/ankiSettings.js",
+                "scripts/sentenceExtractor.js",
                 "scripts/irregularData.js",
                 "scripts/regularRules.js",
                 "scripts/audioManager.js",

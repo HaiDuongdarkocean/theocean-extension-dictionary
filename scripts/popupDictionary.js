@@ -222,13 +222,15 @@ async function playAudioWithUI(popup, index) {
   btn.innerText = originalIcon;
 }
 
-function addNoteToAnki(extensionData) {
+function addNoteToAnki(dataOfCard) {
+  console.log("PopupDrictionary.js::Adding note to Anki:", dataOfCard);
   chrome.runtime.sendMessage(
     {
       action: "addNoteToAnki",
-      data: extensionData,
+      data: dataOfCard,
     },
     (response) => {
+      console.log("PopupDrictionary.js::addNoteToAnki responed:", response);
       if (!response) {
         alert("❌ Không kết nối được Anki");
         return;
@@ -244,6 +246,7 @@ function addNoteToAnki(extensionData) {
 }
 
 function showPopup(x, y, data, level) {
+  console.log("showPopup called with:", { x, y, data, level });
   removePopupsAbove(level - 1);
 
   const newPopup = document.createElement("div");
@@ -280,14 +283,25 @@ function showPopup(x, y, data, level) {
   const targetContainer = document.fullscreenElement || document.body;
   targetContainer.appendChild(newPopup);
 
+  // Gắn sự kiện Add to Anki
+  const addBtn = newPopup.querySelector(".yomi-add-anki-btn");
+
+  if (addBtn) {
+    addBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+
+      addNoteToAnki(data); // gửi extensionData hiện tại
+    });
+  }
+
   // 4. ĐI LẤY DỮ LIỆU THẬT (Bất đồng bộ)
   const audioContainer = newPopup.querySelector(".yomi-audio-group");
 
   fetchAudioFromForvo(data.term).then((realData) => {
     const safeData = realData || [];
-    console.log("Dữ liệu âm thanh thô:", realData);
+    // console.log("Dữ liệu âm thanh thô:", realData);
     const processed = processAudioList(realData);
-    console.log("Dữ liệu sau khi lọc (processed):", processed);
+    // console.log("Dữ liệu sau khi lọc (processed):", processed);
 
     if (processed.fullList && processed.fullList.length > 0) {
       // Lưu toàn bộ audio
@@ -380,7 +394,7 @@ function showPopup(x, y, data, level) {
 
 document.addEventListener("mousemove", (event) => {
   const closestPopup = event.target.closest(".yomitan-popup-stack");
-    console.log("Mouse moved. Closest popup:", closestPopup);
+  // console.log("Mouse moved. Closest popup:", closestPopup);
   // 1. QUẢN LÝ ĐÓNG (Sửa lỗi const và logic delay)
   if (closestPopup) {
     clearTimeout(globalCloseTimer); // Hủy lệnh đóng từ vùng trống
@@ -424,6 +438,7 @@ document.addEventListener("mousemove", (event) => {
 
     // DÒNG KIỂM TRA ĐÂY:
     if (range) {
+      console.log("popupDictionary.js::Range:", range);
       console.log("Mouse đang chạm vào:", range.startContainer);
     } else {
       console.log("Range trả về NULL tại:", event.clientX, event.clientY);
@@ -451,27 +466,61 @@ document.addEventListener("mousemove", (event) => {
 
     // LOG ĐỂ KIỂM TRA: Nếu con thấy log này mà không thấy popup, nghĩa là padding vẫn hẹp
     if (!isOverText) {
-      // console.log("Chuột ở quá xa chữ:", event.clientX, rect.left); // Bật lên khi cần debug
+      console.log("Chuột ở quá xa chữ:", event.clientX, rect.left); // Bật lên khi cần debug
       return;
     }
 
-    const text = range.startContainer.textContent;
-    if (!text || text.trim() === "") return;
+    const blockText = extractBlockTextFromRange(range);
+    console.log("Block text:", blockText);
+    const sentence = extractFinalSentence(range);
+    console.log("Extracted sentence:", sentence);
+    if (!sentence) return;
+    // 1️⃣ Offset trong blockText
+    const textNode = range.startContainer;
+    const nodeText = textNode.textContent;
 
-    // Tìm điểm bắt đầu từ (Regex đã bỏ dấu +)
-    let start = range.startOffset;
-    while (start > 0 && /[^\s\(\"\'\[\{]/.test(text[start - 1])) {
-      start--;
+    const nodeStartIndex = blockText.indexOf(nodeText);
+    if (nodeStartIndex === -1) return;
+
+    let absoluteOffset = nodeStartIndex + range.startOffset;
+
+    // 2️⃣ Tìm sentence start trong blockText
+    const sentenceStartIndex = blockText.indexOf(sentence);
+    if (sentenceStartIndex === -1) return;
+
+    // 3️⃣ Offset trong sentence
+    let relativeOffset = absoluteOffset - sentenceStartIndex;
+
+    // 4️⃣ Bây giờ mới tìm đầu từ
+    while (
+      relativeOffset > 0 &&
+      /[^\s\(\"\'\[\{\n]/.test(sentence[relativeOffset - 1])
+    ) {
+      relativeOffset--;
     }
 
-    const result = await findLongestWord(text, start);
-    if (!result) return;
+    const infoOfSentenceAndWord = await findLongestWord(
+      sentence,
+      relativeOffset,
+    );
+    infoOfSentenceAndWord.sentence = sentence; // Lưu lại câu để hiển thị trong popup. phục vụ cho anki.
+    console.log(
+      "popupDictionary.js::infoOfSentenceAndWord:",
+      infoOfSentenceAndWord,
+    );
+    if (!infoOfSentenceAndWord) return;
+
+    console.log(
+      "Word candidate:",
+      sentence.substring(relativeOffset, relativeOffset + 20),
+    );
+    console.log("Calculated word relativeOffset:", relativeOffset);
 
     // KIỂM TRA TRÙNG TỪ
     const isAlreadyShown = popupStack.some(
       (p) =>
         p.querySelector(".popup-term-title").innerText.trim().toLowerCase() ===
-        result.term.toLowerCase(),
+        infoOfSentenceAndWord.term.toLowerCase(),
     );
     if (isAlreadyShown) return;
 
@@ -480,6 +529,6 @@ document.addEventListener("mousemove", (event) => {
     globalCloseTimer = null;
 
     let level = closestPopup ? parseInt(closestPopup.dataset.level) + 1 : 1;
-    showPopup(event.pageX, event.pageY, result, level);
+    showPopup(event.pageX, event.pageY, infoOfSentenceAndWord, level);
   }, 150);
 });

@@ -96,8 +96,8 @@ async function addNoteToAnki(extensionData) {
   }
 }
 
-// export {
-//     addNoteToAnki,
-//     buildFieldsFromMapping,
-//     buildNoteObject
-// }
+export {
+    addNoteToAnki,
+    buildFieldsFromMapping,
+    buildNoteObject
+}
