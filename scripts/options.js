@@ -30,6 +30,7 @@ const EXTENSION_FIELDS = [
   "Word audio",
   "Sentence audio",
 ];
+const ShortcutUtils = window.ShortcutUtils;
 
 // --- 2. QUẢN LÝ TABS (SIDEBAR) ---
 function initTabs() {
@@ -67,6 +68,10 @@ async function setupAnkiPanel() {
     deckSelect.value = savedAnki.deckName || "";
     modelSelect.value = savedAnki.modelName || "";
     document.getElementById("tagsInput").value = (savedAnki.tags || []).join(",");
+    const allowDuplicateToggle = document.getElementById("allowDuplicateToggle");
+    if (allowDuplicateToggle) allowDuplicateToggle.checked = savedAnki.allowDuplicate !== false;
+    const showBrowserBtnToggle = document.getElementById("showBrowserBtnToggle");
+    if (showBrowserBtnToggle) showBrowserBtnToggle.checked = savedAnki.showBrowserButton !== false;
 
     // Hiển thị bảng Mapping nếu đã chọn Model
     if (savedAnki.modelName) {
@@ -134,6 +139,133 @@ async function setupAudioPanel() {
   populateVoice("voice1", config.tts?.voices?.[0]);
   populateVoice("voice2", config.tts?.voices?.[1]);
   populateVoice("voice3", config.tts?.voices?.[2]);
+
+  // TTS tester UI
+  const voiceListEl = document.getElementById("ttsVoiceList");
+  const clearBtn = document.getElementById("ttsClearSelection");
+  const playBtn = document.getElementById("ttsPlayBtn");
+  const downloadEachBtn = document.getElementById("ttsDownloadEachBtn");
+  const downloadZipBtn = document.getElementById("ttsDownloadZipBtn");
+  const statusEl = document.getElementById("ttsTestStatus");
+  const textInput = document.getElementById("ttsTestText");
+
+  if (voiceListEl) {
+    voiceListEl.innerHTML = voices
+      .map(
+        (v, idx) => `
+        <div class="voice-item">
+          <label>
+            <input type="checkbox" class="tts-voice-checkbox" data-voice="${v.voiceName}" data-lang="${v.lang}">
+            <span>${v.voiceName || "Default"}</span>
+          </label>
+          <span class="voice-meta">${v.lang}${v.gender ? " • " + v.gender : ""}</span>
+        </div>
+      `,
+      )
+      .join("");
+  }
+
+  const updateSelectionCount = () => {
+    const checked = voiceListEl
+      ? voiceListEl.querySelectorAll(".tts-voice-checkbox:checked").length
+      : 0;
+    if (clearBtn) clearBtn.textContent = `Delete selection (${checked})`;
+  };
+
+  voiceListEl?.addEventListener("change", updateSelectionCount);
+  clearBtn?.addEventListener("click", () => {
+    voiceListEl?.querySelectorAll(".tts-voice-checkbox").forEach((c) => (c.checked = false));
+    updateSelectionCount();
+  });
+
+  const getSelectedVoices = () =>
+    Array.from(
+      voiceListEl?.querySelectorAll(".tts-voice-checkbox:checked") || [],
+    ).map((c) => ({
+      voiceName: c.getAttribute("data-voice"),
+      lang: c.getAttribute("data-lang") || "en-US",
+    }));
+
+  async function speakVoices(sequenceOnly) {
+    const text = textInput?.value?.trim();
+    if (!text) {
+      if (statusEl) statusEl.textContent = "Enter text first";
+      return;
+    }
+    const selected = getSelectedVoices();
+    const list = selected.length ? selected : [{ voiceName: voices[0]?.voiceName, lang: voices[0]?.lang || "en-US" }];
+    for (const v of list) {
+      await new Promise((resolve) => {
+        chrome.tts.speak(text, { voiceName: v.voiceName || undefined, onEvent: (e) => {
+          if (e.type === "end" || e.type === "error") resolve();
+        }});
+      });
+    }
+    if (statusEl) statusEl.textContent = sequenceOnly ? "Played selected voices" : "";
+  }
+
+  playBtn?.addEventListener("click", () => speakVoices(true));
+
+  async function buildTtsUrl(text, lang) {
+    return `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(
+      text,
+    )}&tl=${encodeURIComponent(lang || "en-US")}&client=tw-ob`;
+  }
+
+  downloadEachBtn?.addEventListener("click", async () => {
+    const text = textInput?.value?.trim();
+    if (!text) {
+      if (statusEl) statusEl.textContent = "Enter text first";
+      return;
+    }
+    const selected = getSelectedVoices();
+    const list = selected.length ? selected : [{ voiceName: voices[0]?.voiceName, lang: voices[0]?.lang || "en-US" }];
+    for (const [idx, v] of list.entries()) {
+      const url = await buildTtsUrl(text, v.lang);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `tts_${(v.voiceName || v.lang || "voice").replace(/[^a-z0-9_-]/gi, "_")}_${idx + 1}.mp3`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      await new Promise((r) => setTimeout(r, 150));
+    }
+    if (statusEl) statusEl.textContent = "Downloaded files";
+  });
+
+  downloadZipBtn?.addEventListener("click", async () => {
+    const text = textInput?.value?.trim();
+    if (!text) {
+      if (statusEl) statusEl.textContent = "Enter text first";
+      return;
+    }
+    const selected = getSelectedVoices();
+    const list = selected.length ? selected : [{ voiceName: voices[0]?.voiceName, lang: voices[0]?.lang || "en-US" }];
+    if (!window.JSZip) {
+      statusEl.textContent = "JSZip not loaded";
+      statusEl.style.color = "red";
+      return;
+    }
+    statusEl.textContent = "Building zip...";
+    const zip = new JSZip();
+    for (const [idx, v] of list.entries()) {
+      const url = await buildTtsUrl(text, v.lang);
+      const res = await fetch(url);
+      const buf = await res.arrayBuffer();
+      const fname = `tts_${(v.voiceName || v.lang || "voice").replace(/[^a-z0-9_-]/gi, "_")}_${idx + 1}.mp3`;
+      zip.file(fname, buf);
+    }
+    const blob = await zip.generateAsync({ type: "blob" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "tts_voices.zip";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    statusEl.textContent = "Zip downloaded";
+  });
+
+  updateSelectionCount();
 }
 
 async function setupDictionaryPanel() {
@@ -148,10 +280,143 @@ async function setupDictionaryPanel() {
   }
 }
 
-async function setupTranslationPanel() {
+async function setupSentencePanel() {
   const config = await getConfig();
-  const checkbox = document.getElementById("enableTranslate");
-  if (checkbox) checkbox.checked = config.translateEnabled || false;
+  document.getElementById("showSentenceToggle")?.setAttribute("checked", config.sentence?.showSentence !== false ? "checked" : "");
+  const sentenceCheckbox = document.getElementById("showSentenceToggle");
+  if (sentenceCheckbox) sentenceCheckbox.checked = config.sentence?.showSentence !== false;
+
+  const translationCheckbox = document.getElementById("showSentenceTranslationToggle");
+  if (translationCheckbox) translationCheckbox.checked = config.sentence?.showTranslation !== false;
+
+  const translateEnable = document.getElementById("enableTranslate");
+  if (translateEnable) translateEnable.checked = config.translateEnabled || false;
+}
+
+async function setupImagesPanel() {
+  const config = await getConfig();
+  const imgToggle = document.getElementById("imageEnabled");
+  if (imgToggle) imgToggle.checked = config.image?.enabled !== false;
+}
+
+async function setupShortcutPanel() {
+  if (!ShortcutUtils) return;
+  const listEl = document.getElementById("shortcutList");
+  const resetBtn = document.getElementById("resetShortcutsBtn");
+  const statusEl = document.getElementById("shortcutStatus");
+  if (!listEl) return;
+
+  let shortcuts = await ShortcutUtils.loadShortcuts();
+  let capturing = null;
+  const actions = Object.keys(ShortcutUtils.ACTION_LABELS);
+  const isDuplicateShortcut = (candidate, currentAction) =>
+    actions.some(
+      (act) =>
+        act !== currentAction &&
+        shortcuts[act] &&
+        candidate &&
+        candidate.code === shortcuts[act].code &&
+        !!candidate.shift === !!shortcuts[act].shift &&
+        !!candidate.ctrl === !!shortcuts[act].ctrl &&
+        !!candidate.alt === !!shortcuts[act].alt &&
+        !!candidate.meta === !!shortcuts[act].meta,
+    );
+  const captureHandler = async (event) => {
+    if (!capturing) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation();
+
+    if (event.code === "Escape") {
+      capturing.btn.textContent = ShortcutUtils.formatShortcut(
+        shortcuts[capturing.action],
+      );
+      capturing.btn.classList.remove("is-duplicate");
+      statusEl.textContent = "Canceled";
+      statusEl.style.color = "";
+      capturing = null;
+      window.removeEventListener("keydown", captureHandler, true);
+      return;
+    }
+    if (ShortcutUtils.isModifierOnly(event.code)) return;
+
+    const candidate = ShortcutUtils.eventToShortcut(event);
+    if (isDuplicateShortcut(candidate, capturing.action)) {
+      capturing.btn.classList.add("is-duplicate");
+      capturing.btn.textContent = ShortcutUtils.formatShortcut(candidate);
+      statusEl.textContent = "Duplicate shortcut";
+      statusEl.style.color = "red";
+      return;
+    }
+
+    capturing.btn.classList.remove("is-duplicate");
+    shortcuts[capturing.action] = candidate;
+    shortcuts = await ShortcutUtils.saveShortcuts(shortcuts);
+
+    capturing.btn.textContent = ShortcutUtils.formatShortcut(
+      shortcuts[capturing.action],
+    );
+    statusEl.textContent = "Saved";
+    statusEl.style.color = "green";
+    setTimeout(() => {
+      if (statusEl.textContent === "Saved") statusEl.textContent = "";
+    }, 900);
+
+    capturing = null;
+    window.removeEventListener("keydown", captureHandler, true);
+  };
+
+  const render = () => {
+    listEl.innerHTML = actions
+      .map(
+        (action) => `
+      <div class="row">
+        <div class="row__label">${ShortcutUtils.ACTION_LABELS[action]}</div>
+        <div class="row__control">
+          <button class="btn shortcut-capture-btn" type="button" data-action="${action}">
+            ${ShortcutUtils.formatShortcut(shortcuts[action])}
+          </button>
+        </div>
+      </div>
+    `,
+      )
+      .join("");
+  };
+
+  render();
+
+  listEl.addEventListener("click", (event) => {
+    const btn = event.target.closest(".shortcut-capture-btn");
+    if (!btn) return;
+
+    if (capturing) {
+      capturing.btn.textContent = ShortcutUtils.formatShortcut(
+        shortcuts[capturing.action],
+      );
+      window.removeEventListener("keydown", captureHandler, true);
+      capturing = null;
+    }
+
+    const action = btn.dataset.action;
+    if (!action) return;
+    capturing = { action, btn };
+    btn.textContent = "Press key...";
+    btn.classList.remove("is-duplicate");
+    statusEl.textContent = "Press a key (Esc to cancel)";
+    statusEl.style.color = "";
+    window.addEventListener("keydown", captureHandler, true);
+  });
+
+  if (resetBtn) {
+    resetBtn.addEventListener("click", async () => {
+      shortcuts = await ShortcutUtils.resetShortcuts();
+      render();
+      statusEl.textContent = "Reset to defaults";
+      setTimeout(() => {
+        if (statusEl.textContent === "Reset to defaults") statusEl.textContent = "";
+      }, 900);
+    });
+  }
 }
 
 function clampInt(value, min, max, fallback) {
@@ -174,18 +439,26 @@ async function saveGeneralSettings(statusId) {
       lookupResultMode:
         document.getElementById("lookupResultMode")?.value || "stacked",
       translateEnabled: document.getElementById("enableTranslate")?.checked || false,
+      sentence: {
+        showSentence: document.getElementById("showSentenceToggle")?.checked ?? true,
+        showTranslation: document.getElementById("showSentenceTranslationToggle")?.checked ?? true,
+      },
       forvo: {
         enabled: document.getElementById("forvoEnabled")?.checked ?? true,
         mode: document.getElementById("forvoMode")?.value || "auto",
         maxDisplay,
         autoplayCount,
       },
+      image: {
+        ...(currentGeneralConfig.image || {}),
+        enabled: document.getElementById("imageEnabled")?.checked ?? true,
+      },
       tts: {
         enabled: document.getElementById("ttsEnabled")?.checked || false,
         voices: [
-          document.getElementById("voice1").value,
-          document.getElementById("voice2").value,
-          document.getElementById("voice3").value,
+          document.getElementById("voice1")?.value,
+          document.getElementById("voice2")?.value,
+          document.getElementById("voice3")?.value,
         ]
       }
     };
@@ -219,6 +492,8 @@ async function saveAnkiSettings(statusId) {
         .split(",")
         .map((t) => t.trim())
         .filter(Boolean),
+      allowDuplicate: document.getElementById("allowDuplicateToggle")?.checked ?? true,
+      showBrowserButton: document.getElementById("showBrowserBtnToggle")?.checked ?? true,
       fieldMapping,
     };
 
@@ -470,24 +745,33 @@ document.addEventListener("DOMContentLoaded", async () => {
   await setupAnkiPanel().catch(e => console.log("Anki Panel load fail"));
   await setupAudioPanel().catch(e => console.log("Audio Panel load fail"));
   await setupDictionaryPanel().catch(e => console.log("Dictionary Panel load fail"));
-  await setupTranslationPanel().catch(e => console.log("Translation Panel load fail"));
+  await setupSentencePanel().catch(e => console.log("Sentence Panel load fail"));
+  await setupImagesPanel().catch(e => console.log("Images Panel load fail"));
+  await setupShortcutPanel().catch(e => console.log("Shortcut Panel load fail"));
   await renderResources().catch(e => console.log("Resource render fail", e));
 
   const autoSaveGeneral = debounce(
     () => saveGeneralSettings("dictionarySaveStatus"),
     350,
   );
-  const autoSaveTranslation = debounce(
-    () => saveGeneralSettings("translationSaveStatus"),
+  const autoSaveSentence = debounce(
+    () => saveGeneralSettings("sentenceSaveStatus"),
+    350,
+  );
+  const autoSaveImages = debounce(
+    () => saveGeneralSettings("imagesSaveStatus"),
     350,
   );
   const autoSaveAudio = debounce(() => saveGeneralSettings("audioSaveStatus"), 350);
-  const autoSaveAnki = debounce(() => saveAnkiSettings("ankiSaveStatus"), 500);
 
   document.getElementById("lookupMode")?.addEventListener("change", autoSaveGeneral);
   document.getElementById("lookupResultMode")?.addEventListener("change", autoSaveGeneral);
 
-  document.getElementById("enableTranslate")?.addEventListener("change", autoSaveTranslation);
+  document.getElementById("showSentenceToggle")?.addEventListener("change", autoSaveSentence);
+  document.getElementById("showSentenceTranslationToggle")?.addEventListener("change", autoSaveSentence);
+  document.getElementById("enableTranslate")?.addEventListener("change", autoSaveSentence);
+
+  document.getElementById("imageEnabled")?.addEventListener("change", autoSaveImages);
 
   document.getElementById("forvoEnabled")?.addEventListener("change", autoSaveAudio);
   document.getElementById("forvoMode")?.addEventListener("change", autoSaveAudio);
@@ -498,12 +782,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("voice2")?.addEventListener("change", autoSaveAudio);
   document.getElementById("voice3")?.addEventListener("change", autoSaveAudio);
 
-  document.getElementById("deckSelect")?.addEventListener("change", autoSaveAnki);
-  document.getElementById("modelSelect")?.addEventListener("change", autoSaveAnki);
-  document.getElementById("tagsInput")?.addEventListener("input", autoSaveAnki);
-  document.getElementById("fieldMappingContainer")?.addEventListener("change", (e) => {
-    if (e.target && e.target.matches("select")) autoSaveAnki();
-  });
+  document.getElementById("ankiSaveBtn")?.addEventListener("click", () => saveAnkiSettings("ankiSaveStatus"));
 
   const btnLookupTest = document.getElementById("lookupTestBtn");
   if (btnLookupTest) btnLookupTest.onclick = () => handleLookupTest();

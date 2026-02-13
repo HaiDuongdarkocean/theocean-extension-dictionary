@@ -8,6 +8,7 @@
   </head>
   <body>
     <script src="scripts/vendor.jszip.min.js"></script>
+    <script src="scripts/shortcuts.js"></script>
     <div class="app">
       <div class="app__inner">
       <aside class="nav">
@@ -19,7 +20,8 @@
         <div class="nav__list">
           <button class="nav__btn is-active" data-panel="dictionaryPanel" type="button">Dictionary</button>
           <button class="nav__btn" data-panel="ankiPanel" type="button">Anki</button>
-          <button class="nav__btn" data-panel="translationPanel" type="button">Translation</button>
+          <button class="nav__btn" data-panel="sentencePanel" type="button">Sentence</button>
+          <button class="nav__btn" data-panel="imagesPanel" type="button">Images</button>
           <button class="nav__btn" data-panel="audioPanel" type="button">Audio</button>
         </div>
       </aside>
@@ -34,7 +36,7 @@
           </div>
 
           <div class="grid">
-            <div class="card">
+            <div class="card tts-tester">
               <div class="card__header">
                 <h2 class="card__title">Import Dictionary</h2>
               </div>
@@ -85,6 +87,19 @@
 
                 <div class="actions">
                   <span class="status" id="dictionarySaveStatus"></span>
+                </div>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card__header">
+                <h2 class="card__title">Shortcuts</h2>
+              </div>
+              <div class="card__body">
+                <div id="shortcutList"></div>
+                <div class="actions">
+                  <button class="btn" id="resetShortcutsBtn" type="button">Reset defaults</button>
+                  <span class="status" id="shortcutStatus"></span>
                 </div>
               </div>
             </div>
@@ -146,9 +161,26 @@
                   <div class="row__control"><input type="text" id="tagsInput" placeholder="tag1, tag2" /></div>
                 </div>
 
+                <div class="row">
+                  <div class="row__label">Allow duplicate</div>
+                  <div class="row__control">
+                    <input type="checkbox" id="allowDuplicateToggle" />
+                    <span>Permit adding duplicate notes</span>
+                  </div>
+                </div>
+
+                <div class="row">
+                  <div class="row__label">Show browser button</div>
+                  <div class="row__control">
+                    <input type="checkbox" id="showBrowserBtnToggle" />
+                    <span>After add, show “View Browser”</span>
+                  </div>
+                </div>
+
                 <div id="fieldMappingContainer"></div>
 
                 <div class="actions">
+                  <button class="btn btn--primary" id="ankiSaveBtn" type="button">Save</button>
                   <span class="status" id="ankiSaveStatus"></span>
                 </div>
               </div>
@@ -156,31 +188,74 @@
           </div>
         </section>
 
-        <section id="translationPanel" class="panel">
+        <section id="sentencePanel" class="panel">
           <div class="panel__header">
             <div>
-              <h1 class="panel__title">Translation</h1>
-              <p class="panel__desc">Translate example sentences.</p>
+              <h1 class="panel__title">Sentence</h1>
+              <p class="panel__desc">Control sentence display and translation.</p>
             </div>
           </div>
 
           <div class="grid">
             <div class="card">
               <div class="card__header">
-                <h2 class="card__title">Google Translate</h2>
+                <h2 class="card__title">Sentence display</h2>
               </div>
               <div class="card__body">
                 <div class="row">
-                  <div class="row__label">Auto translate</div>
+                  <div class="row__label">Show sentence</div>
                   <div class="row__control">
-                    <input type="checkbox" id="enableTranslate" />
-                    <span>Translate sentence to Vietnamese</span>
+                    <input type="checkbox" id="showSentenceToggle" />
+                    <span>Display sentence in popup</span>
                   </div>
                 </div>
-                <p class="hint">Uses Google Translate web endpoint.</p>
+                <div class="row">
+                  <div class="row__label">Show translation</div>
+                  <div class="row__control">
+                    <input type="checkbox" id="showSentenceTranslationToggle" />
+                    <span>Display translation in popup</span>
+                  </div>
+                </div>
+                <div class="row">
+                  <div class="row__label">Fetch translation</div>
+                  <div class="row__control">
+                    <input type="checkbox" id="enableTranslate" />
+                    <span>Use Google Translate for sentence</span>
+                  </div>
+                </div>
 
                 <div class="actions">
-                  <span class="status" id="translationSaveStatus"></span>
+                  <span class="status" id="sentenceSaveStatus"></span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="imagesPanel" class="panel">
+          <div class="panel__header">
+            <div>
+              <h1 class="panel__title">Images</h1>
+              <p class="panel__desc">Control image fetching in popup.</p>
+            </div>
+          </div>
+
+          <div class="grid">
+            <div class="card">
+              <div class="card__header">
+                <h2 class="card__title">Image source</h2>
+              </div>
+              <div class="card__body">
+                <div class="row">
+                  <div class="row__label">Show images</div>
+                  <div class="row__control">
+                    <input type="checkbox" id="imageEnabled" />
+                    <span>Fetch and display images in popup</span>
+                  </div>
+                </div>
+
+                <div class="actions">
+                  <span class="status" id="imagesSaveStatus"></span>
                 </div>
               </div>
             </div>
@@ -273,6 +348,39 @@
 
                 <div class="actions">
                   <span class="status" id="audioSaveStatus"></span>
+                </div>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card__header">
+                <h2 class="card__title">TTS Tester</h2>
+              </div>
+              <div class="card__body">
+                <div class="row">
+                  <div class="row__label">Sentence</div>
+                  <div class="row__control">
+                    <textarea id="ttsTestText" rows="2" placeholder="Type a sentence to test"></textarea>
+                  </div>
+                </div>
+
+                <div class="row" style="align-items:flex-start;">
+                  <div class="row__label">Voices</div>
+                  <div class="row__control" style="width:100%;">
+                    <div class="tts-header">
+                      <button class="btn" id="ttsClearSelection" type="button">Delete selection (0)</button>
+                      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                        <button class="btn btn--primary" id="ttsPlayBtn" type="button">Play audio</button>
+                        <button class="btn" id="ttsDownloadEachBtn" type="button">Download mp3 (each)</button>
+                        <button class="btn" id="ttsDownloadZipBtn" type="button">Download zip</button>
+                      </div>
+                    </div>
+                    <div id="ttsVoiceList" class="voice-list"></div>
+                  </div>
+                </div>
+
+                <div class="actions">
+                  <span class="status" id="ttsTestStatus"></span>
                 </div>
               </div>
             </div>

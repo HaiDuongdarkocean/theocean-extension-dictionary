@@ -1,5 +1,6 @@
 import { putResource, bulkInsertDict, bulkInsertFreq } from "../storage.js";
 
+
 export class BaseImporter {
   constructor(file, options = {}) {
     this.file = file;

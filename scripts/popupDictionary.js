@@ -8,6 +8,31 @@ let globalCloseTimer = null;
 let lookupTimer = null;
 let popupStack = [];
 let lookupMode = "hover";
+let activePopup = null;
+let shortcutConfig = null;
+let shortcutReady = false;
+const ShortcutUtils = window.ShortcutUtils;
+const POPUP_SIZE_KEY = "oceanPopupSize";
+
+function loadPopupSize() {
+  return new Promise((resolve) => {
+    chrome.storage.local.get([POPUP_SIZE_KEY], (res) => {
+      resolve(res[POPUP_SIZE_KEY] || { width: 320, height: null });
+    });
+  });
+}
+
+function savePopupSize(size) {
+  chrome.storage.local.set({ [POPUP_SIZE_KEY]: size });
+}
+
+function loadAnkiUIConfig() {
+  return new Promise((resolve) => {
+    chrome.storage.sync.get(["ankiConfig"], (res) =>
+      resolve(res.ankiConfig || {}),
+    );
+  });
+}
 
 // 2. Tạo phần tử Popup (như bài trước)
 const popup = document.createElement("div");
@@ -40,6 +65,55 @@ chrome.storage.onChanged.addListener((changes, area) => {
     lookupMode = changes.userConfig.newValue?.lookupMode || "hover";
   }
 });
+
+async function loadShortcutConfig() {
+  if (!ShortcutUtils) return;
+  shortcutConfig = await ShortcutUtils.loadShortcuts();
+  shortcutReady = true;
+}
+
+loadShortcutConfig();
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === "local" && ShortcutUtils && changes[ShortcutUtils.STORAGE_KEY]) {
+    shortcutConfig = ShortcutUtils.DEFAULT_SHORTCUTS;
+    shortcutReady = false;
+    loadShortcutConfig();
+  }
+});
+
+function getShortcut(action) {
+  if (!ShortcutUtils) return null;
+  if (!shortcutReady || !shortcutConfig) return ShortcutUtils.DEFAULT_SHORTCUTS[action] || null;
+  return shortcutConfig[action] || ShortcutUtils.DEFAULT_SHORTCUTS[action] || null;
+}
+
+function getShortcutLabel(action) {
+  if (!ShortcutUtils) return "";
+  return ShortcutUtils.formatShortcut(getShortcut(action));
+}
+
+async function fetchUserConfig() {
+  return new Promise((resolve) => {
+    chrome.runtime.sendMessage({ action: "getUserConfig" }, resolve);
+  });
+}
+
+async function playTtsSentence(text) {
+  if (!text) return;
+  const res = await fetchUserConfig();
+  const cfg = res?.config || {};
+  const ttsCfg = cfg.tts || {};
+  if (ttsCfg.enabled === false) return;
+  const voiceName =
+    (ttsCfg.voices || []).find((v) => v) ||
+    ttsCfg.preferredLang ||
+    undefined;
+  chrome.runtime.sendMessage({
+    action: "speakLocal",
+    text,
+    voiceName,
+  });
+}
 
 // Sửa lại hàm này: Thay vì tự mở DB, ta gửi tin nhắn cho Background
 async function getDefinitionSendMessage(word) {
@@ -124,12 +198,10 @@ function removePopupsAbove(level) {
   while (popupStack.length > level) {
     let p = popupStack.pop();
     if (p) {
-      // Gỡ bỏ sự kiện phím tắt của riêng popup này trước khi xóa element
-      if (p._keyHandler) {
-        document.removeEventListener("keydown", p._keyHandler);
-        console.log(`Đã gỡ phím tắt của popup level ${p.dataset.level}`);
-      }
       p.remove();
+      if (activePopup === p) {
+        activePopup = popupStack[popupStack.length - 1] || null;
+      }
     }
   }
 }
@@ -159,17 +231,13 @@ function renderAudioGroup(popup) {
 
   container.innerHTML = visibleList
     .map((audio, index) => {
-      const isPrimary = index === 0;
-      const accentColor =
-        audio.country === "United States" ? "#0866ff" : "#00c0a5";
-
-      return `<span class="yomi-audio-btn"
+      const countryTag = audio.country === "United States" ? "US" : "UK";
+      return `<button class="yomi-audio-btn"
               data-url="${audio.url}"
               data-index="${index}"
-              title="${audio.country}"
-              style="cursor:pointer;margin-right:8px;color:${accentColor};font-size:${isPrimary ? "1em" : "1em"};">
-              ${isPrimary ? "🔊" : "🔊"}
-            </span>`;
+              title="Play audio [${getShortcutLabel("audioNext")}/${getShortcutLabel("audioPrev")}] • Select [${getShortcutLabel("audioSelect")}]">
+              ${countryTag} ${index + 1}
+            </button>`;
     })
     .join("");
 
@@ -178,14 +246,14 @@ function renderAudioGroup(popup) {
     const remain = fullList.length - visibleCount;
 
     container.innerHTML += `
-      <span class="yomi-load-more"
-            style="font-size:10px;color:#999;cursor:pointer">
+      <button class="yomi-load-more" title="Load more audio [${getShortcutLabel("audioNext")}]">
         +${remain}
-      </span>`;
+      </button>`;
   }
 
   attachAudioEvents(popup);
   attachLoadMoreEvent(popup);
+  applyAudioFocus(popup);
 }
 
 function attachLoadMoreEvent(popup) {
@@ -206,7 +274,14 @@ function attachAudioEvents(popup) {
     btn.onclick = (e) => {
       e.stopPropagation();
       const index = parseInt(btn.getAttribute("data-index"));
+      popup._state.focusedAudioIndex = index;
+      if (popup._state.selectedAudios.has(index)) {
+        popup._state.selectedAudios.delete(index);
+      } else {
+        popup._state.selectedAudios.add(index);
+      }
       playAudioWithUI(popup, index);
+      applyAudioFocus(popup);
     };
   });
 }
@@ -252,22 +327,347 @@ async function playAudioWithUI(popup, index) {
   btn.innerText = originalIcon;
 }
 
-function addNoteToAnki(dataOfCard) {
+function parseDefinitionBlocks(data) {
+  const blocks = [];
+
+  // Preferred: meaningAtoms from background payload.
+  if (Array.isArray(data.meaningAtoms) && data.meaningAtoms.length > 0) {
+    data.meaningAtoms.forEach((atom, index) => {
+      blocks.push({
+        source: data.resourceTitle || "",
+        html: `<b>${atom.head || `#${index + 1}`}</b> ${atom.glossHtml || ""}`,
+      });
+    });
+    return blocks;
+  }
+
+  const temp = document.createElement("div");
+  temp.innerHTML = data.definition || "";
+
+  const sourceBlocks = temp.querySelectorAll(".ocean-dict-block");
+  if (sourceBlocks.length > 0) {
+    sourceBlocks.forEach((sourceEl) => {
+      const sourceTitle =
+        sourceEl.querySelector(".ocean-dict-title")?.textContent?.trim() || "";
+      const atoms = sourceEl.querySelectorAll(".ocean-atom");
+      if (atoms.length > 0) {
+        atoms.forEach((atomEl) => {
+          blocks.push({
+            source: sourceTitle,
+            html: atomEl.innerHTML,
+          });
+        });
+      } else {
+        blocks.push({
+          source: sourceTitle,
+          html: sourceEl.querySelector(".ocean-dict-body")?.innerHTML || sourceEl.innerHTML,
+        });
+      }
+    });
+    return blocks;
+  }
+
+  const atoms = temp.querySelectorAll(".ocean-atom");
+  if (atoms.length > 0) {
+    atoms.forEach((atomEl) => {
+      blocks.push({ source: data.resourceTitle || "", html: atomEl.innerHTML });
+    });
+    return blocks;
+  }
+
+  // Fallback split by double line break blocks.
+  const fallback = (data.definition || "")
+    .split(/<br\s*\/?>\s*<br\s*\/?>|\n\n/i)
+    .map((item) => item.trim())
+    .filter(Boolean);
+  fallback.forEach((item) => blocks.push({ source: data.resourceTitle || "", html: item }));
+  return blocks;
+}
+
+function applyDefinitionUIState(popup) {
+  const state = popup._state;
+  const nodes = popup.querySelectorAll(".yomi-definition-block");
+  nodes.forEach((node, idx) => {
+    node.classList.toggle("is-focused", idx === state.focusedDefIndex);
+    node.classList.toggle("is-selected", state.selectedDefinitions.has(idx));
+  });
+  if (nodes[state.focusedDefIndex]) {
+    nodes[state.focusedDefIndex].scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }
+}
+
+function renderDefinitionBlocks(popup, data) {
+  const container = popup.querySelector(".definition-container");
+  const blocks = parseDefinitionBlocks(data);
+  popup._definitionBlocks = blocks;
+
+  container.innerHTML = blocks
+    .map(
+      (block, index) => `
+      <div class="yomi-definition-block" data-def-index="${index}">
+        ${block.source ? `<div class="yomi-definition-source">${block.source}</div>` : ""}
+        <div class="yomi-definition-html">${block.html}</div>
+      </div>
+    `,
+    )
+    .join("");
+
+  popup._state = popup._state || {};
+  popup._state.focusedDefIndex = 0;
+  popup._state.selectedDefinitions = popup._state.selectedDefinitions || new Set();
+
+  container.querySelectorAll(".yomi-definition-block").forEach((node) => {
+    node.addEventListener("click", () => {
+      const index = Number(node.getAttribute("data-def-index"));
+      popup._state.focusedDefIndex = index;
+      if (popup._state.selectedDefinitions.has(index)) {
+        popup._state.selectedDefinitions.delete(index);
+      } else {
+        popup._state.selectedDefinitions.add(index);
+      }
+      applyDefinitionUIState(popup);
+    });
+  });
+
+  applyDefinitionUIState(popup);
+}
+
+function moveDefinitionFocus(popup, delta) {
+  const state = popup._state;
+  const total = popup._definitionBlocks?.length || 0;
+  if (total === 0) return;
+  let next = state.focusedDefIndex + delta;
+  if (next < 0) next = total - 1;
+  if (next >= total) next = 0;
+  state.focusedDefIndex = next;
+  applyDefinitionUIState(popup);
+}
+
+function toggleFocusedDefinitionSelection(popup) {
+  const state = popup._state;
+  const idx = state.focusedDefIndex || 0;
+  if (state.selectedDefinitions.has(idx)) {
+    state.selectedDefinitions.delete(idx);
+  } else {
+    state.selectedDefinitions.add(idx);
+  }
+  applyDefinitionUIState(popup);
+}
+
+function applyImageFocus(popup) {
+  const nodes = popup.querySelectorAll(".yomi-thumb");
+  nodes.forEach((node, idx) => {
+    node.classList.toggle("is-focused", idx === popup._state.focusedImageIndex);
+    node.classList.toggle("is-selected", popup._state.selectedImages.has(idx));
+  });
+  if (nodes[popup._state.focusedImageIndex]) {
+    nodes[popup._state.focusedImageIndex].scrollIntoView({
+      behavior: "smooth",
+      block: "nearest",
+      inline: "nearest",
+    });
+  }
+}
+
+function moveImageFocus(popup, delta) {
+  const nodes = popup.querySelectorAll(".yomi-thumb");
+  if (nodes.length === 0) return;
+  let idx = popup._state.focusedImageIndex;
+
+  if (delta > 0) {
+    if (idx < nodes.length - 1) {
+      idx += 1;
+    } else {
+      const moreBtn = popup.querySelector(".yomi-load-more-img");
+      if (moreBtn && moreBtn.style.display !== "none") {
+        moreBtn.click();
+      }
+    }
+  } else if (delta < 0) {
+    idx = Math.max(0, idx - 1);
+  }
+
+  popup._state.focusedImageIndex = idx;
+  applyImageFocus(popup);
+}
+
+function toggleFocusedAudioSelection(popup) {
+  const idx = popup._state.focusedAudioIndex;
+  if (popup._state.selectedAudios.has(idx)) {
+    popup._state.selectedAudios.delete(idx);
+  } else {
+    popup._state.selectedAudios.add(idx);
+  }
+  applyAudioFocus(popup);
+}
+
+function toggleFocusedImageSelection(popup) {
+  const idx = popup._state.focusedImageIndex;
+  if (popup._state.selectedImages.has(idx)) {
+    popup._state.selectedImages.delete(idx);
+  } else {
+    popup._state.selectedImages.add(idx);
+  }
+  applyImageFocus(popup);
+}
+
+function applyAudioFocus(popup) {
+  const nodes = popup.querySelectorAll(".yomi-audio-btn");
+  nodes.forEach((node, idx) => {
+    node.classList.toggle("is-focused", idx === popup._state.focusedAudioIndex);
+    node.classList.toggle("is-selected", popup._state.selectedAudios.has(idx));
+  });
+  if (nodes[popup._state.focusedAudioIndex]) {
+    nodes[popup._state.focusedAudioIndex].scrollIntoView({
+      behavior: "smooth",
+      block: "nearest",
+      inline: "nearest",
+    });
+  }
+}
+
+function moveAudioFocus(popup, delta) {
+  const nodes = popup.querySelectorAll(".yomi-audio-btn");
+  if (nodes.length === 0) return;
+  let idx = popup._state.focusedAudioIndex;
+
+  if (delta > 0) {
+    if (idx < nodes.length - 1) {
+      idx += 1;
+    } else {
+      const moreBtn = popup.querySelector(".yomi-load-more");
+      if (moreBtn) moreBtn.click();
+    }
+  } else if (delta < 0) {
+    idx = Math.max(0, idx - 1);
+  }
+
+  popup._state.focusedAudioIndex = idx;
+  applyAudioFocus(popup);
+  playAudioWithUI(popup, idx);
+}
+
+function buildAnkiPayload(dataOfCard, popup) {
+  const payload = { ...dataOfCard };
+  const blocks = popup?._definitionBlocks || [];
+  const selectedDefIdx = popup?._state?.selectedDefinitions
+    ? Array.from(popup._state.selectedDefinitions.values()).sort((a, b) => a - b)
+    : [];
+
+  const finalDefIdx = selectedDefIdx.length > 0
+    ? selectedDefIdx
+    : blocks.map((_, idx) => idx);
+  const definitionHtml = finalDefIdx
+    .map((idx) => blocks[idx]?.html || "")
+    .filter(Boolean)
+    .join("<br>");
+  if (definitionHtml) payload.definition = definitionHtml;
+
+  const selectedImageIdx = popup?._state?.selectedImages
+    ? Array.from(popup._state.selectedImages.values()).sort((a, b) => a - b)
+    : [];
+  const imageUrls = selectedImageIdx.length > 0
+    ? selectedImageIdx.map((idx) => popup._allImageUrls?.[idx]).filter(Boolean)
+    : (() => {
+      const focus = popup?._state?.focusedImageIndex ?? 0;
+      const url = popup?._allImageUrls?.[focus];
+      return url ? [url] : [];
+    })();
+  if (imageUrls.length > 0) {
+    payload.images = imageUrls;
+    payload.image = imageUrls[0];
+  }
+
+  const selectedAudioIdx = popup?._state?.selectedAudios
+    ? Array.from(popup._state.selectedAudios.values()).sort((a, b) => a - b)
+    : [];
+  const audioUrls = selectedAudioIdx.length > 0
+    ? selectedAudioIdx.map((idx) => popup._audioFullList?.[idx]?.url).filter(Boolean)
+    : (() => {
+      const focus = popup?._state?.focusedAudioIndex ?? 0;
+      const url = popup?._audioFullList?.[focus]?.url;
+      return url ? [url] : [];
+    })();
+  if (audioUrls.length > 0) {
+    payload.audioList = audioUrls;
+    payload.audio = audioUrls[0];
+  }
+
+  return payload;
+}
+
+function handlePopupShortcutKeydown(event) {
+  if (!activePopup || !ShortcutUtils) return;
+  const action = Object.keys(ShortcutUtils.ACTION_LABELS).find((key) => {
+    const shortcut = getShortcut(key);
+    return shortcut && ShortcutUtils.shortcutEquals(event, shortcut);
+  });
+  if (!action) return;
+
+  event.preventDefault();
+  event.stopPropagation();
+  event.stopImmediatePropagation();
+
+  if (action === "defPrev") moveDefinitionFocus(activePopup, -1);
+  if (action === "defNext") moveDefinitionFocus(activePopup, 1);
+  if (action === "defToggle") toggleFocusedDefinitionSelection(activePopup);
+  if (action === "imageNext") moveImageFocus(activePopup, 1);
+  if (action === "imagePrev") moveImageFocus(activePopup, -1);
+  if (action === "imageSelect") toggleFocusedImageSelection(activePopup);
+  if (action === "audioNext") moveAudioFocus(activePopup, 1);
+  if (action === "audioPrev") moveAudioFocus(activePopup, -1);
+  if (action === "audioSelect") toggleFocusedAudioSelection(activePopup);
+  if (action === "ttsSentence") {
+    const sentenceText =
+      activePopup._cardData?.sentence ||
+      activePopup._cardData?.term ||
+      "";
+    playTtsSentence(sentenceText);
+  }
+  if (action === "addToAnki") {
+    const payload = buildAnkiPayload(activePopup._cardData || {}, activePopup);
+    addNoteToAnki(payload);
+  }
+}
+
+document.addEventListener("keydown", handlePopupShortcutKeydown, true);
+
+async function addNoteToAnki(dataOfCard, popup) {
+  const uiCfg = await loadAnkiUIConfig();
   console.log("PopupDrictionary.js::Adding note to Anki:", dataOfCard);
   chrome.runtime.sendMessage(
     {
       action: "addNoteToAnki",
       data: dataOfCard,
     },
-    (response) => {
+    async (response) => {
       console.log("PopupDrictionary.js::addNoteToAnki responed:", response);
       if (!response) {
         alert("😵 Không kết nối được Anki");
         return;
       }
 
+      const addBtn = popup?.querySelector(".yomi-add-anki-btn");
+      if (response.duplicate) {
+        if (addBtn) {
+          addBtn.textContent = "Already added";
+          addBtn.disabled = true;
+          ensureUpdateButton(popup, () => updateExistingAnkiCard(dataOfCard, response.noteIds?.[0], popup));
+        }
+        if (uiCfg.showBrowserButton !== false) showBrowserButton(popup, response.noteIds);
+        return;
+      }
+
       if (response.success) {
-        alert("✅ Đã thêm vào Anki!");
+        if (uiCfg.showBrowserButton !== false) {
+          if (addBtn) {
+            addBtn.textContent = "View Browser";
+            addBtn.onclick = () => showBrowserButton(popup, response.noteIds, true);
+          }
+          showBrowserButton(popup, response.noteIds);
+        } else {
+          alert("✅ Đã thêm vào Anki!");
+        }
       } else {
         alert("😵 Lỗi: " + response.error);
       }
@@ -275,57 +675,144 @@ function addNoteToAnki(dataOfCard) {
   );
 }
 
-function showPopup(x, y, data, level) {
+function showBrowserButton(popup, noteIds = [], forceClick = false) {
+  if (!popup) return;
+  popup._ankiNoteIds = noteIds;
+  const query =
+    Array.isArray(noteIds) && noteIds.length
+      ? noteIds.map((id) => `nid:${id}`).join(" OR ")
+      : "";
+  let viewBtn = popup.querySelector(".yomi-view-browser-btn");
+  if (!viewBtn) {
+    viewBtn = document.createElement("button");
+    viewBtn.className = "yomi-view-browser-btn";
+    viewBtn.textContent = "View Browser";
+    const header = popup.querySelector(".yomi-header > div");
+    if (header) header.appendChild(viewBtn);
+  }
+  viewBtn.onclick = () => {
+    chrome.runtime.sendMessage(
+      { action: "openAnkiBrowser", query },
+      () => {},
+    );
+  };
+  if (forceClick) viewBtn.click();
+}
+
+function ensureUpdateButton(popup, handler) {
+  if (!popup) return;
+  let btn = popup.querySelector(".yomi-update-anki-btn");
+  if (!btn) {
+    btn = document.createElement("button");
+    btn.className = "yomi-update-anki-btn";
+    btn.textContent = "Update card";
+    const header = popup.querySelector(".yomi-header > div");
+    if (header) header.appendChild(btn);
+  }
+  btn.onclick = handler;
+  btn.disabled = false;
+}
+
+function updateExistingAnkiCard(extensionData, noteId, popup) {
+  if (!noteId) return;
+  chrome.runtime.sendMessage(
+    { action: "updateAnkiNote", noteId, data: extensionData },
+    (res) => {
+      if (!res || !res.success) {
+        alert("Không cập nhật được card.");
+      } else {
+        const addBtn = popup?.querySelector(".yomi-add-anki-btn");
+        if (addBtn) {
+          addBtn.textContent = "Updated";
+          addBtn.disabled = true;
+        }
+      }
+    },
+  );
+}
+
+async function showPopup(x, y, data, level) {
   console.log("showPopup called with:", { x, y, data, level });
   removePopupsAbove(level - 1);
 
   const newPopup = document.createElement("div");
   newPopup.className = "yomitan-popup-stack";
   newPopup.dataset.level = level;
+  newPopup._state = {
+    focusedDefIndex: 0,
+    focusedImageIndex: 0,
+    focusedAudioIndex: 0,
+    selectedDefinitions: new Set(),
+    selectedImages: new Set(),
+    selectedAudios: new Set(),
+  };
+  newPopup._cardData = data;
 
   // 1. Tạo KHUNG XƯƠNG (Placeholder) - Không dùng biến audioButtonsHTML ở đây
+  const showSentence = data._showSentence !== false;
+  const showTranslation = data._showTranslation !== false;
+  const showImages = data._imagesEnabled !== false;
+  const sentenceHTML = showSentence
+    ? `<div class="yomi-sentence-container" style="padding: 10px 16px; font-style: italic; font-size: 13px; color: #555; border-top: 1px solid #eee;">
+          <div>${data.sentence || ""}</div>
+          ${showTranslation && data.sentenceTranslation ? `<div style="color: #666; margin-top: 4px;">${data.sentenceTranslation}</div>` : ""}
+        </div>`
+    : "";
+
+  const savedSize = await loadPopupSize();
+
   newPopup.innerHTML = `
         <div class="yomi-header">
             <div style="display: flex; justify-content: space-between; align-items: center; gap: 10px;">
-                <span class="popup-term-title">${data.term}</span>
-                <span class="yomi-add-anki-btn" style="margin-top:8px;padding:4px 8px;cursor:pointer;" tooltip="add to Anki">💎</span>
+                <div>
+                  <div class="popup-ipa-line">/${data.pronunciation || "n/a"}/</div>
+                  <span class="popup-term-title">${data.term}</span>
+                </div>
+                <button class="yomi-add-anki-btn" title="Add to Anki [${getShortcutLabel("addToAnki")}]" type="button">Add Anki</button>
             </div>
             
             ${data.originalWord ? `<div class="yomi-origin-note">(Gốc của: <span>${data.originalWord}</span>)</div>` : ""}
 
             <div class="yomi-pronunciation yomi-pronunciation-container" style="display: flex; align-items: center; margin-top: 5px; color: var(--yomi-primary)">
-                <span style="font-family: 'Segoe UI', sans-serif; margin-right: 10px;">/${data.pronunciation || "n/a"}/</span>
                 <div class="yomi-audio-group">
-                    <span style="opacity: 0.3">🔈 🔈 🔈</span>
+                    <span style="opacity: 0.5">Audio pending...</span>
+                </div>
+                <div class="yomi-tts-sentence" style="margin-left:8px;">
+                  <button class="yomi-tts-btn" title="Play sentence [${getShortcutLabel("ttsSentence")}]">TTS</button>
                 </div>
             </div>
         </div>
 
-        <div class="yomi-image-section" style="margin-top: 10px; border-top: 1px solid #eee; padding-top: 10px;">
-          <div class="yomi-image-gallery" style="display: flex; flex-wrap: wrap; gap: 5px; justify-content: center;">
+        ${
+          showImages
+            ? `<div class="yomi-image-section" style="margin-top: 10px; border-top: 1px solid #eee; padding-top: 10px;">
+          <div class="yomi-image-gallery">
             </div>
-          <div class="yomi-image-controls" style="text-align: center; margin-top: 5px;">
-            <span class="yomi-load-more-img" style="font-size: 11px; color: #0078ff; cursor: pointer; display: none;">Xem thêm ảnh...</span>
+          <div class="yomi-image-controls">
+            <button class="yomi-load-more-img" style="display: none;" title="Load more images [${getShortcutLabel("imageNext")}]">More images</button>
           </div>
-        </div>
+        </div>`
+            : ""
+        }
 
-        <div class="yomi-sentence-container" style="padding: 10px 16px; font-style: italic; font-size: 13px; color: #555; border-top: 1px solid #eee;">
-          <div>${data.sentence}</div>
-          ${data.sentenceTranslation ? `<div style="color: #666; margin-top: 4px;">${data.sentenceTranslation}</div>` : ""}
-        </div>
+        ${sentenceHTML}
 
 
         <div class="definition-container">
-            <div class="yomi-definition-text">${data.definition}</div>
+            <div class="yomi-definition-loading">Loading definitions...</div>
         </div>
 
         <div style="padding: 6px 16px; background: var(--yomi-surface); font-size: 10px; color: var(--yomi-text-sub); display: flex; justify-content: space-between; border-top: 1px solid var(--yomi-border);">
             <span>Level ${level}</span>
         </div>
+        <div class="yomi-resizer"></div>
     `;
 
   const targetContainer = document.fullscreenElement || document.body;
   targetContainer.appendChild(newPopup);
+
+  if (savedSize?.width) newPopup.style.width = `${savedSize.width}px`;
+  if (savedSize?.height) newPopup.style.height = `${savedSize.height}px`;
 
   // Gắn sự kiện Add to Anki
   const addBtn = newPopup.querySelector(".yomi-add-anki-btn");
@@ -333,10 +820,20 @@ function showPopup(x, y, data, level) {
   if (addBtn) {
     addBtn.addEventListener("click", (e) => {
       e.stopPropagation();
-
-      addNoteToAnki(data); // gửi extensionData hiện tại
+      const payload = buildAnkiPayload(data, newPopup);
+      addNoteToAnki(payload, newPopup);
     });
   }
+
+  const ttsBtn = newPopup.querySelector(".yomi-tts-btn");
+  if (ttsBtn) {
+    ttsBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      playTtsSentence(data.sentence || data.term || "");
+    });
+  }
+
+  renderDefinitionBlocks(newPopup, data);
 
   // 4. ĐI LẤY DỮ LIỆU THẬT (Bất đồng bộ)
   const audioContainer = newPopup.querySelector(".yomi-audio-group");
@@ -372,9 +869,11 @@ function showPopup(x, y, data, level) {
   }
 
   if (!AudioConfig.forvoEnabled) {
-    audioContainer.innerHTML = `<span style="font-size:10px; color:#ccc;">Forvo disabled</span>`;
+    audioContainer.innerHTML = "";
+    newPopup._audioFullList = [];
+    newPopup._audioVisibleCount = 0;
   } else if (AudioConfig.forvoMode === "manual") {
-    audioContainer.innerHTML = `<button class="yomi-forvo-load" style="border:1px solid #ddd;background:transparent;border-radius:8px;padding:4px 8px;font-size:11px;cursor:pointer;">Load audio</button>`;
+    audioContainer.innerHTML = `<button class="yomi-forvo-load" style="border:1px solid #ddd;background:transparent;border-radius:8px;padding:4px 8px;font-size:11px;cursor:pointer;" title="Load audio [${getShortcutLabel("audioNext")}]">Load audio</button>`;
     const btn = audioContainer.querySelector(".yomi-forvo-load");
     if (btn) {
       btn.onclick = (e) => {
@@ -386,57 +885,29 @@ function showPopup(x, y, data, level) {
     loadForvoAudio();
   }
 
-  // 5. Gắn phím tắt (Nhớ remove khi đóng)
-  const keyHandler = (e) => {
-    if (!e.ctrlKey || e.code !== "Space") return;
-
-    e.preventDefault();
-
-    // Ctrl + Shift + Space → phát 3 audio đầu
-    if (e.shiftKey) {
-      playMultipleAudios(newPopup, 3);
-    }
-    // Ctrl + Space → phát 1 audio
-    else {
-      playMultipleAudios(newPopup, 1);
-    }
-  };
-
-  document.addEventListener("keydown", keyHandler);
-  // Lưu keyHandler vào popup để sau này gỡ ra
-  newPopup._keyHandler = keyHandler;
-
-  // QUAN TRỌNG: Khi đóng popup phải gỡ sự kiện phím tắt
-
-  // --- GIẢI THUẬT TÍNH VỊ TRÍ CHỐNG TRÀN ---
-  const popupWidth = 300; // Chiều rộng cố định hoặc đo bằng newPopup.offsetWidth
-  const popupHeight = newPopup.offsetHeight;
-
-  // Lấy tọa độ chuột tương ứng với Viewport (cửa sổ hiển thị)
-  // Vì x, y của con là pageX, pageY (tính cả phần đã cuộn)
-  const scrollX = window.scrollX;
-  const scrollY = window.scrollY;
+  // --- GIẢI THUẬT TÍNH VỊ TRÍ CHỐNG TRÀN (viewport, fixed) ---
+  const popupWidth = 320;
+  const popupHeight = newPopup.offsetHeight || 400;
   const viewWidth = window.innerWidth;
   const viewHeight = window.innerHeight;
 
-  let finalX = x + 10; // Mặc định lệch phải 10px
-  let finalY = y + 20; // Mặc định lệch dưới 20px
+  let finalX = x + 10; // lệch phải 10px so với điểm trỏ
+  let finalY = y + 20; // lệch xuống 20px
 
-  // 1. Kiểm tra tràn bên PHẢI
-  if (finalX + popupWidth > scrollX + viewWidth) {
-    finalX = x - popupWidth - 10; // Lật sang bên trái chuột
+  // Tràn phải -> lật sang trái
+  if (finalX + popupWidth > viewWidth) {
+    finalX = x - popupWidth - 10;
   }
-  // Kiểm tra tràn bên TRÁI (nếu lật sang trái mà vẫn tràn)
-  if (finalX < scrollX) finalX = scrollX + 5;
+  // Tràn trái
+  if (finalX < 5) finalX = 5;
 
-  // 2. Kiểm tra tràn bên DƯỚI
-  if (finalY + popupHeight > scrollY + viewHeight) {
-    finalY = y - popupHeight - 20; // Lật lên phía trên chuột
+  // Tràn dưới -> lật lên trên
+  if (finalY + popupHeight > viewHeight) {
+    finalY = y - popupHeight - 20;
   }
-  // Kiểm tra tràn bên TRÊN
-  if (finalY < scrollY) finalY = scrollY + 5;
+  // Tràn trên
+  if (finalY < 5) finalY = 5;
 
-  // Áp dụng tọa độ cuối cùng
   newPopup.style.left = `${finalX}px`;
   newPopup.style.top = `${finalY}px`;
   newPopup.style.visibility = "visible"; // Hiển thị lại sau khi đã căn chỉnh
@@ -444,14 +915,12 @@ function showPopup(x, y, data, level) {
 
   //-----------------------
   // --- ĐOẠN THÊM MỚI: Ảnh ---
-  // Trong showPopup...
-
-  let allImageUrls = [];
-  let visibleImageCount = 0;
-  let selectedImageUrl = null; // Biến lưu ảnh người dùng chọn
-
-  const gallery = newPopup.querySelector(".yomi-image-gallery");
+  if (showImages) {
+    let allImageUrls = [];
+    let visibleImageCount = 0;
+    const gallery = newPopup.querySelector(".yomi-image-gallery");
   const loadMoreBtn = newPopup.querySelector(".yomi-load-more-img");
+  newPopup._allImageUrls = [];
 
   function renderImages() {
     const nextBatch = allImageUrls.slice(
@@ -462,49 +931,88 @@ function showPopup(x, y, data, level) {
       const img = document.createElement("img");
       img.src = url;
       img.className = "yomi-thumb";
-      img.style =
-        "width: 80px; height: 80px; object-fit: cover; border-radius: 4px; cursor: pointer; border: 2px solid transparent;";
+      img.title = `Image [${getShortcutLabel("imageNext")}/${getShortcutLabel("imagePrev")}] • Select [${getShortcutLabel("imageSelect")}]`;
 
-      // Sự kiện khi nhấn chọn ảnh
-      img.onclick = () => {
-        newPopup
-          .querySelectorAll(".yomi-thumb")
-          .forEach((i) => (i.style.borderColor = "transparent"));
-        img.style.borderColor = "#0078ff"; // Highlight ảnh được chọn
-        selectedImageUrl = url;
-        data.image = url; // Cập nhật vào data để Anki lấy đúng ảnh này
-        console.log("Đã chọn ảnh để thêm Anki:", url);
-      };
+        // Sự kiện khi nhấn chọn ảnh
+        img.onclick = () => {
+          const index = Number(img.getAttribute("data-image-index"));
+          newPopup._state.focusedImageIndex = index;
+          toggleFocusedImageSelection(newPopup);
+        };
 
-      gallery.appendChild(img);
-    });
+        const imageIndex = visibleImageCount + gallery.querySelectorAll(".yomi-thumb").length;
+        img.setAttribute("data-image-index", String(imageIndex));
 
-    visibleImageCount += nextBatch.length;
+        gallery.appendChild(img);
+      });
 
-    // Hiện/Ẩn nút "Xem thêm"
-    if (visibleImageCount < allImageUrls.length) {
-      const remaining = allImageUrls.length - visibleImageCount;
-      loadMoreBtn.innerText = `+${remaining} ảnh (Xem thêm)`;
-      loadMoreBtn.style.display = "inline";
-    } else {
-      loadMoreBtn.style.display = "none";
+      visibleImageCount += nextBatch.length;
+      newPopup._allImageUrls = allImageUrls.slice();
+
+      // Hiện/Ẩn nút "Xem thêm"
+      if (visibleImageCount < allImageUrls.length) {
+        const remaining = allImageUrls.length - visibleImageCount;
+        loadMoreBtn.innerText = `More images (+${remaining})`;
+        loadMoreBtn.style.display = "inline-flex";
+      } else {
+        loadMoreBtn.style.display = "none";
+      }
+
+      applyImageFocus(newPopup);
     }
+
+    // Gọi lấy dữ liệu
+    chrome.runtime.sendMessage(
+      { action: "fetchImages", term: data.term },
+      (res) => {
+        if (res && res.success && res.urls.length > 0) {
+          allImageUrls = res.urls;
+          renderImages(); // Hiện 3 cái đầu
+        }
+      },
+    );
+
+    loadMoreBtn.onclick = () => renderImages();
+  } else {
+    newPopup._allImageUrls = [];
   }
 
-  // Gọi lấy dữ liệu
-  chrome.runtime.sendMessage(
-    { action: "fetchImages", term: data.term },
-    (res) => {
-      if (res && res.success && res.urls.length > 0) {
-        allImageUrls = res.urls;
-        renderImages(); // Hiện 3 cái đầu
-      }
-    },
-  );
-
-  loadMoreBtn.onclick = () => renderImages();
+  // Resize handle
+  const resizer = newPopup.querySelector(".yomi-resizer");
+  if (resizer) {
+    let startX = 0;
+    let startY = 0;
+    let startW = 0;
+    let startH = 0;
+    const minW = 260;
+    const minH = 180;
+    const onMouseMove = (e) => {
+      const newW = Math.max(minW, startW + (e.clientX - startX));
+      const newH = Math.max(minH, startH + (e.clientY - startY));
+      newPopup.style.width = `${newW}px`;
+      newPopup.style.height = `${newH}px`;
+    };
+    const onMouseUp = (e) => {
+      document.removeEventListener("mousemove", onMouseMove);
+      document.removeEventListener("mouseup", onMouseUp);
+      savePopupSize({
+        width: parseInt(newPopup.style.width || "320", 10),
+        height: parseInt(newPopup.style.height || "0", 10) || null,
+      });
+    };
+    resizer.addEventListener("mousedown", (e) => {
+      e.preventDefault();
+      startX = e.clientX;
+      startY = e.clientY;
+      startW = newPopup.offsetWidth;
+      startH = newPopup.offsetHeight;
+      document.addEventListener("mousemove", onMouseMove);
+      document.addEventListener("mouseup", onMouseUp);
+    });
+  }
 
   popupStack.push(newPopup);
+  activePopup = newPopup;
 }
 
 document.addEventListener("mousemove", (event) => {
@@ -619,12 +1127,12 @@ document.addEventListener("mousemove", (event) => {
       sentence,
       relativeOffset,
     );
+    if (!infoOfSentenceAndWord) return;
     infoOfSentenceAndWord.sentence = sentence; // Lưu lại câu để hiển thị trong popup. phục vụ cho anki.
     console.log(
       "popupDictionary.js::infoOfSentenceAndWord:",
       infoOfSentenceAndWord,
     );
-    if (!infoOfSentenceAndWord) return;
 
     console.log(
       "Word candidate:",
@@ -639,8 +1147,13 @@ document.addEventListener("mousemove", (event) => {
         resolve(res.userConfig || {}),
       );
     });
+    const showSentence = config.sentence?.showSentence !== false;
+    const showTranslation = config.sentence?.showTranslation !== false;
+    infoOfSentenceAndWord._showSentence = showSentence;
+    infoOfSentenceAndWord._showTranslation = showTranslation;
+    infoOfSentenceAndWord._imagesEnabled = config.image?.enabled !== false;
 
-    if (config.translateEnabled && sentence) {
+    if (showTranslation && config.translateEnabled && sentence) {
       // Gửi tin nhắn nhờ Background dịch hộ
       const translationResult = await new Promise((resolve) => {
         chrome.runtime.sendMessage(
@@ -672,6 +1185,6 @@ document.addEventListener("mousemove", (event) => {
 
     let level = closestPopup ? parseInt(closestPopup.dataset.level) + 1 : 1;
 
-    showPopup(event.pageX, event.pageY, infoOfSentenceAndWord, level);
+    showPopup(event.clientX, event.clientY, infoOfSentenceAndWord, level);
   }, 150);
 });

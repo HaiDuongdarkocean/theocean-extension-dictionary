@@ -9,7 +9,13 @@ const DEFAULT_CONFIG = {
         enabled: true,
         autoPlay: false,
         voices: ["", "", ""], // Slot 1, 2, 3
-        preferredLang: "en-US"
+        preferredLang: "en-US",
+        maxDisplay: 1,
+        autoplayCount: 0
+    },
+    sentence: {
+        showSentence: true,
+        showTranslation: true,
     },
     translateEnabled: false,
     lookupMode: "hover",

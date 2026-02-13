@@ -91,6 +91,57 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true; // Giữ kết nối bất đồng bộ
   }
 
+  if (request.action === "openAnkiBrowser") {
+    const query = request.query || "";
+    ankiInvoke("guiBrowse", { query })
+      .then((res) => sendResponse({ success: true, result: res }))
+      .catch((err) => sendResponse({ success: false, error: err.message }));
+    return true;
+  }
+
+  if (request.action === "updateAnkiNote") {
+    const noteId = request.noteId;
+    const data = request.data || {};
+    if (!noteId) {
+      sendResponse({ success: false, error: "Missing noteId" });
+      return;
+    }
+    loadAnkiConfig()
+      .then(async (cfg) => {
+        const fields = buildFieldsFromMapping(data, cfg);
+        const res = await ankiInvoke("updateNoteFields", {
+          note: { id: noteId, fields },
+        });
+        return res;
+      })
+      .then((res) => sendResponse({ success: true, result: res }))
+      .catch((err) => sendResponse({ success: false, error: err.message }));
+    return true;
+  }
+
+  if (request.action === "getUserConfig") {
+    getConfig()
+      .then((cfg) => sendResponse({ success: true, config: cfg }))
+      .catch((err) => sendResponse({ success: false, error: err.message }));
+    return true;
+  }
+
+  if (request.action === "speakLocal") {
+    const text = request.text || "";
+    const voiceName = request.voiceName;
+    if (!text.trim()) {
+      sendResponse({ success: false, error: "No text" });
+      return;
+    }
+    try {
+      TTSModule.speak(text, voiceName);
+      sendResponse({ success: true });
+    } catch (e) {
+      sendResponse({ success: false, error: e.message });
+    }
+    return true;
+  }
+
   // Fetch audio từ Forvo
   if (request.action === "fetchForvo") {
     console.log("Đang đi chợ lấy từ:", request.term); // Dòng này để debug
@@ -133,7 +184,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   // Xử lý thêm Note vào Anki (phiên bản nâng cao)
   if (request.action === "addNoteToAnki") {
     handleAddToAnki(request.data)
-      .then(() => sendResponse({ success: true }))
+      .then((res) => sendResponse({ success: true, ...res }))
       .catch((err) => sendResponse({ success: false, error: err.message }));
 
     return true;
@@ -221,39 +272,52 @@ async function handleAddToAnki(extensionData) {
   const fields = buildFieldsFromMapping(extensionData, config);
   console.log("Background::Built fields for Anki note:", fields);
 
-  // ===== WORD AUDIO =====
-  if (extensionData.audio) {
-    console.log("--> Phát hiện có Audio URL, bắt đầu tải..."); // Debug log
-    try {
-      const filename = `${extensionData.term}_${Date.now()}.mp3`;
-      const base64 = await downloadAudioAsBase64(extensionData.audio);
-      const soundTag = await uploadAudioToAnki(filename, base64);
+  // ===== WORD AUDIO (single or multi) =====
+  const audioUrls =
+    Array.isArray(extensionData.audioList) && extensionData.audioList.length > 0
+      ? extensionData.audioList
+      : extensionData.audio
+        ? [extensionData.audio]
+        : [];
 
-      console.log("--> Upload thành công, soundTag:", soundTag); // Debug log
+  if (audioUrls.length > 0) {
+    try {
+      const soundTags = [];
+      for (const url of audioUrls) {
+        const filename = `${extensionData.term}_${Date.now()}_${soundTags.length + 1}.mp3`;
+        const base64 = await downloadAudioAsBase64(url);
+        const soundTag = await uploadAudioToAnki(filename, base64);
+        soundTags.push(soundTag);
+      }
 
       const audioFieldName = config.fieldMapping["Word audio"];
       if (audioFieldName) {
-        fields[audioFieldName] = soundTag;
-      } else {
-        console.warn(
-          "--> Cảnh báo: Chưa map field 'Word audio' trong Settings",
-        );
+        fields[audioFieldName] = soundTags.join(" ");
       }
     } catch (e) {
       console.error("--> Lỗi tải/upload audio:", e);
     }
-  } else {
-    console.log("--> KHÔNG tìm thấy audio trong data gửi tới.");
   }
 
-  if (extensionData.image) {
+  const imageUrls =
+    Array.isArray(extensionData.images) && extensionData.images.length > 0
+      ? extensionData.images
+      : extensionData.image
+        ? [extensionData.image]
+        : [];
+
+  if (imageUrls.length > 0) {
     try {
-      const filename = `img_${extensionData.term}_${Date.now()}.jpg`;
-      const base64 = await downloadAudioAsBase64(extensionData.image); // Dùng chung hàm fetch->base64
-      const imgTag = await uploadImageToAnki(filename, base64);
+      const imageTags = [];
+      for (const url of imageUrls) {
+        const filename = `img_${extensionData.term}_${Date.now()}_${imageTags.length + 1}.jpg`;
+        const base64 = await downloadAudioAsBase64(url);
+        const imgTag = await uploadImageToAnki(filename, base64);
+        imageTags.push(imgTag);
+      }
 
       const imgField = config.fieldMapping["Images"];
-      if (imgField) fields[imgField] = imgTag;
+      if (imgField) fields[imgField] = imageTags.join("");
     } catch (e) {
       console.error("Lỗi xử lý ảnh Anki:", e);
     }
@@ -263,9 +327,22 @@ async function handleAddToAnki(extensionData) {
     deckName: config.deckName,
     modelName: config.modelName,
     fields,
-    options: { allowDuplicate: false },
+    options: { allowDuplicate: config.allowDuplicate !== false },
     tags: config.tags || [],
   };
+
+  // Duplicate check
+  if (config.allowDuplicate === false) {
+    const targetField = config.fieldMapping?.["Target word"];
+    const targetValue = targetField ? fields[targetField] : null;
+    if (targetValue) {
+      const dupQuery = `"${targetValue}"`;
+      const found = await ankiInvoke("findNotes", { query: dupQuery });
+      if (Array.isArray(found.result) && found.result.length > 0) {
+        return { duplicate: true, noteIds: found.result };
+      }
+    }
+  }
 
   const result = await ankiInvoke("addNote", { note });
 
@@ -275,6 +352,9 @@ async function handleAddToAnki(extensionData) {
   if (result.error) {
     throw new Error(result.error);
   }
+
+  const createdId = result.result?.noteIds ? result.result.noteIds : result.result;
+  return { success: true, noteIds: Array.isArray(createdId) ? createdId : createdId ? [createdId] : [] };
 
   console.log("Final note fields:", fields);
 }

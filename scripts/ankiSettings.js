@@ -5,7 +5,9 @@ const DEFAULT_ANKI_CONFIG = {
   autoFieldMapping: true,
   fieldMapping: {},
   enableTranslate: false,
-  enableLocalTTS: true
+  enableLocalTTS: true,
+  allowDuplicate: true,
+  showBrowserButton: true
 };
 
 export async function loadAnkiConfig() {
