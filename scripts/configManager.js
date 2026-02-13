@@ -37,8 +37,27 @@ const DEFAULT_CONFIG = {
 export async function getConfig() {
     return new Promise((resolve) => {
         chrome.storage.sync.get(["userConfig"], (result) => {
-            // Merge cài đặt của user với mặc định (cái gì user chưa chỉnh thì lấy mặc định)
-            resolve(result.userConfig || DEFAULT_CONFIG);
+            const userCfg = result.userConfig || {};
+            resolve({
+                ...DEFAULT_CONFIG,
+                ...userCfg,
+                tts: {
+                    ...DEFAULT_CONFIG.tts,
+                    ...(userCfg.tts || {}),
+                },
+                sentence: {
+                    ...DEFAULT_CONFIG.sentence,
+                    ...(userCfg.sentence || {}),
+                },
+                forvo: {
+                    ...DEFAULT_CONFIG.forvo,
+                    ...(userCfg.forvo || {}),
+                },
+                image: {
+                    ...DEFAULT_CONFIG.image,
+                    ...(userCfg.image || {}),
+                },
+            });
         });
     });
 }

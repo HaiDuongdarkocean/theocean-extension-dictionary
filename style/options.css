@@ -531,6 +531,17 @@ select,
   white-space: nowrap;
 }
 
+.tts-tester .tts-header__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.tts-tester .tts-flex-row .row__control {
+  width: 100%;
+}
+
 .tts-tester .voice-list {
   max-height: 260px;
   overflow: auto;
@@ -549,6 +560,8 @@ select,
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--surface-2);
+  gap: 8px;
+  user-select: none;
 }
 
 .tts-tester .voice-item label {
@@ -561,6 +574,38 @@ select,
 .tts-tester .voice-meta {
   font-size: 12px;
   color: var(--text-sub);
+}
+
+.tts-tester .voice-order {
+  width: 42px;
+  text-align: center;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  padding: 4px 6px;
+}
+
+.tts-tester .voice-drag {
+  cursor: grab;
+  font-size: 12px;
+  color: var(--text-sub);
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  padding: 4px 8px;
+}
+
+.tts-tester .voice-item.is-dragging {
+  opacity: 0.55;
+}
+
+.resource-row .resource-drag {
+  min-width: 56px;
+  cursor: grab;
+}
+
+.resource-row.is-dragging {
+  opacity: 0.55;
 }
 
 @media (max-width: 860px) {

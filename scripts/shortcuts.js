@@ -6,6 +6,8 @@
     defNext: "Definition down",
     defToggle: "Toggle definition select",
     addToAnki: "Add to Anki",
+    updateCard: "Update card",
+    viewBrowser: "View browser",
     imageNext: "Image next",
     imagePrev: "Image previous",
     imageSelect: "Select image",
@@ -19,7 +21,9 @@
     defPrev: { code: "KeyZ", shift: false, ctrl: false, alt: false, meta: false },
     defNext: { code: "KeyC", shift: false, ctrl: false, alt: false, meta: false },
     defToggle: { code: "KeyX", shift: false, ctrl: false, alt: false, meta: false },
-    addToAnki: { code: "KeyE", shift: false, ctrl: false, alt: false, meta: false },
+    addToAnki: { code: "KeyR", shift: false, ctrl: false, alt: false, meta: false },
+    updateCard: { code: "KeyU", shift: false, ctrl: false, alt: false, meta: false },
+    viewBrowser: { code: "KeyT", shift: false, ctrl: false, alt: false, meta: false },
     imageNext: { code: "KeyQ", shift: false, ctrl: false, alt: false, meta: false },
     imagePrev: { code: "KeyE", shift: false, ctrl: false, alt: false, meta: false },
     imageSelect: { code: "KeyW", shift: false, ctrl: false, alt: false, meta: false },
@@ -40,10 +44,34 @@
     };
   }
 
+  function isLegacyAddToAnkiShortcut(raw) {
+    return (
+      raw &&
+      raw.code === "KeyE" &&
+      !raw.shift &&
+      !raw.ctrl &&
+      !raw.alt &&
+      !raw.meta
+    );
+  }
+
+  function migrateLegacyShortcuts(input) {
+    if (!input || typeof input !== "object") return input;
+    const hasNewActions = !!input.updateCard || !!input.viewBrowser;
+    if (!hasNewActions && isLegacyAddToAnkiShortcut(input.addToAnki)) {
+      return {
+        ...input,
+        addToAnki: { code: "KeyR", shift: false, ctrl: false, alt: false, meta: false },
+      };
+    }
+    return input;
+  }
+
   function mergeWithDefaults(input) {
+    const migrated = migrateLegacyShortcuts(input);
     const out = {};
     Object.keys(DEFAULT_SHORTCUTS).forEach((action) => {
-      out[action] = normalizeShortcut(input?.[action], DEFAULT_SHORTCUTS[action]);
+      out[action] = normalizeShortcut(migrated?.[action], DEFAULT_SHORTCUTS[action]);
     });
     return out;
   }

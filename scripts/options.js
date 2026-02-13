@@ -123,68 +123,176 @@ async function setupAudioPanel() {
   const voices = await TTSModule.getAvailableVoices();
 
   document.getElementById("ttsEnabled").checked = config.tts?.enabled || false;
+  document.getElementById("ttsMaxDisplay").value = String(config.tts?.maxDisplay || 1);
+  document.getElementById("ttsAutoplayCount").value = String(config.tts?.autoplayCount ?? 0);
 
   document.getElementById("forvoEnabled").checked = config.forvo?.enabled ?? true;
   document.getElementById("forvoMode").value = config.forvo?.mode || "auto";
   document.getElementById("forvoMaxDisplay").value = String(config.forvo?.maxDisplay || 3);
   document.getElementById("forvoAutoplayCount").value = String(config.forvo?.autoplayCount ?? 1);
 
-  // Hàm đổ giọng đọc vào 3 Slot
+  const savedVoices = Array.isArray(config.tts?.savedVoices) ? config.tts.savedVoices : [];
+  const savedVoiceMap = new Map(savedVoices.map((v, idx) => [v.voiceName, { ...v, order: Number(v.order) || idx + 1 }]));
+
+  const alphabeticalVoices = voices
+    .slice()
+    .sort((a, b) => (a.voiceName || "").localeCompare(b.voiceName || ""));
+
+  // Voice options for TTS slots should prioritize saved list.
+  const voiceOptionsForSlots = (() => {
+    const selected = alphabeticalVoices.filter((v) => savedVoiceMap.has(v.voiceName));
+    return selected.length > 0 ? selected : alphabeticalVoices;
+  })();
+
   const populateVoice = (selectId, currentVoice) => {
     const select = document.getElementById(selectId);
+    if (!select) return;
     select.innerHTML = '<option value="">-- Mặc định hệ thống --</option>' +
-      voices.map(v => `<option value="${v.voiceName}" ${v.voiceName === currentVoice ? 'selected' : ''}>${v.voiceName} (${v.lang})</option>`).join("");
+      voiceOptionsForSlots.map(v => `<option value="${v.voiceName}" ${v.voiceName === currentVoice ? 'selected' : ''}>${v.voiceName} (${v.lang})</option>`).join("");
   };
 
   populateVoice("voice1", config.tts?.voices?.[0]);
   populateVoice("voice2", config.tts?.voices?.[1]);
   populateVoice("voice3", config.tts?.voices?.[2]);
 
-  // TTS tester UI
   const voiceListEl = document.getElementById("ttsVoiceList");
   const clearBtn = document.getElementById("ttsClearSelection");
   const playBtn = document.getElementById("ttsPlayBtn");
+  const saveListBtn = document.getElementById("ttsSaveVoiceListBtn");
   const downloadEachBtn = document.getElementById("ttsDownloadEachBtn");
   const downloadZipBtn = document.getElementById("ttsDownloadZipBtn");
   const statusEl = document.getElementById("ttsTestStatus");
   const textInput = document.getElementById("ttsTestText");
 
-  if (voiceListEl) {
-    voiceListEl.innerHTML = voices
+  let testerVoices = alphabeticalVoices.map((voice, index) => {
+    const saved = savedVoiceMap.get(voice.voiceName);
+    return {
+      voiceName: voice.voiceName,
+      lang: voice.lang || "en-US",
+      gender: voice.gender || "",
+      selected: !!saved,
+      order: saved ? saved.order : index + 1,
+    };
+  });
+
+  function normalizeOrders() {
+    testerVoices = testerVoices
+      .slice()
+      .sort((a, b) => a.order - b.order || a.voiceName.localeCompare(b.voiceName))
+      .map((item, idx) => ({ ...item, order: idx + 1 }));
+  }
+
+  function renderTesterVoices() {
+    if (!voiceListEl) return;
+    normalizeOrders();
+    voiceListEl.innerHTML = testerVoices
       .map(
-        (v, idx) => `
-        <div class="voice-item">
-          <label>
-            <input type="checkbox" class="tts-voice-checkbox" data-voice="${v.voiceName}" data-lang="${v.lang}">
-            <span>${v.voiceName || "Default"}</span>
-          </label>
-          <span class="voice-meta">${v.lang}${v.gender ? " • " + v.gender : ""}</span>
-        </div>
-      `,
+        (v) => `
+          <div class="voice-item" draggable="true" data-voice="${v.voiceName}">
+            <label>
+              <input type="checkbox" class="tts-voice-checkbox" data-voice="${v.voiceName}" ${v.selected ? "checked" : ""}>
+              <span>${v.voiceName}</span>
+            </label>
+            <span class="voice-meta">${v.lang}${v.gender ? " • " + v.gender : ""}</span>
+            <input class="voice-order" type="number" min="1" value="${v.order}" data-order-voice="${v.voiceName}">
+            <button class="btn voice-play-btn" type="button" data-play-voice="${v.voiceName}">Play</button>
+            <span class="voice-drag" title="Drag to reorder">Drag</span>
+          </div>
+        `,
       )
       .join("");
+    updateSelectionCount();
+    bindVoiceDragDrop();
+  }
+
+  function getSelectedVoices() {
+    const selected = testerVoices
+      .filter((v) => v.selected)
+      .slice()
+      .sort((a, b) => a.order - b.order);
+    return selected.length > 0 ? selected : testerVoices.slice(0, 1);
   }
 
   const updateSelectionCount = () => {
-    const checked = voiceListEl
-      ? voiceListEl.querySelectorAll(".tts-voice-checkbox:checked").length
-      : 0;
+    const checked = testerVoices.filter((v) => v.selected).length;
     if (clearBtn) clearBtn.textContent = `Delete selection (${checked})`;
   };
 
-  voiceListEl?.addEventListener("change", updateSelectionCount);
+  voiceListEl?.addEventListener("change", (event) => {
+    const checkbox = event.target.closest(".tts-voice-checkbox");
+    if (checkbox) {
+      const voiceName = checkbox.getAttribute("data-voice");
+      testerVoices = testerVoices.map((v) =>
+        v.voiceName === voiceName ? { ...v, selected: checkbox.checked } : v,
+      );
+      updateSelectionCount();
+      return;
+    }
+    const orderInput = event.target.closest(".voice-order");
+    if (orderInput) {
+      const voiceName = orderInput.getAttribute("data-order-voice");
+      const newOrder = Number.parseInt(orderInput.value, 10);
+      if (!Number.isNaN(newOrder)) {
+        testerVoices = testerVoices.map((v) =>
+          v.voiceName === voiceName ? { ...v, order: newOrder } : v,
+        );
+        renderTesterVoices();
+      }
+    }
+  });
+
+  voiceListEl?.addEventListener("click", async (event) => {
+    const playBtnEl = event.target.closest(".voice-play-btn");
+    if (!playBtnEl) return;
+    const voiceName = playBtnEl.getAttribute("data-play-voice");
+    const text = textInput?.value?.trim();
+    if (!text) {
+      if (statusEl) statusEl.textContent = "Enter text first";
+      return;
+    }
+    await new Promise((resolve) => {
+      chrome.tts.speak(text, {
+        voiceName: voiceName || undefined,
+        onEvent: (e) => {
+          if (e.type === "end" || e.type === "error") resolve();
+        },
+      });
+    });
+  });
+
   clearBtn?.addEventListener("click", () => {
-    voiceListEl?.querySelectorAll(".tts-voice-checkbox").forEach((c) => (c.checked = false));
+    testerVoices = testerVoices.map((v) => ({ ...v, selected: false }));
+    renderTesterVoices();
     updateSelectionCount();
   });
 
-  const getSelectedVoices = () =>
-    Array.from(
-      voiceListEl?.querySelectorAll(".tts-voice-checkbox:checked") || [],
-    ).map((c) => ({
-      voiceName: c.getAttribute("data-voice"),
-      lang: c.getAttribute("data-lang") || "en-US",
-    }));
+  function bindVoiceDragDrop() {
+    if (!voiceListEl) return;
+    let draggingVoice = null;
+    voiceListEl.querySelectorAll(".voice-item").forEach((item) => {
+      item.addEventListener("dragstart", () => {
+        draggingVoice = item.getAttribute("data-voice");
+        item.classList.add("is-dragging");
+      });
+      item.addEventListener("dragend", () => {
+        item.classList.remove("is-dragging");
+      });
+      item.addEventListener("dragover", (e) => e.preventDefault());
+      item.addEventListener("drop", (e) => {
+        e.preventDefault();
+        const targetVoice = item.getAttribute("data-voice");
+        if (!draggingVoice || !targetVoice || draggingVoice === targetVoice) return;
+        const fromIdx = testerVoices.findIndex((v) => v.voiceName === draggingVoice);
+        const toIdx = testerVoices.findIndex((v) => v.voiceName === targetVoice);
+        if (fromIdx < 0 || toIdx < 0) return;
+        const copy = testerVoices.slice();
+        const [moved] = copy.splice(fromIdx, 1);
+        copy.splice(toIdx, 0, moved);
+        testerVoices = copy.map((v, idx) => ({ ...v, order: idx + 1 }));
+        renderTesterVoices();
+      });
+    });
+  }
 
   async function speakVoices(sequenceOnly) {
     const text = textInput?.value?.trim();
@@ -192,8 +300,7 @@ async function setupAudioPanel() {
       if (statusEl) statusEl.textContent = "Enter text first";
       return;
     }
-    const selected = getSelectedVoices();
-    const list = selected.length ? selected : [{ voiceName: voices[0]?.voiceName, lang: voices[0]?.lang || "en-US" }];
+    const list = getSelectedVoices();
     for (const v of list) {
       await new Promise((resolve) => {
         chrome.tts.speak(text, { voiceName: v.voiceName || undefined, onEvent: (e) => {
@@ -212,22 +319,56 @@ async function setupAudioPanel() {
     )}&tl=${encodeURIComponent(lang || "en-US")}&client=tw-ob`;
   }
 
+  async function fetchWithTimeout(url, timeoutMs = 5000) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      return await fetch(url, { signal: controller.signal });
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  saveListBtn?.addEventListener("click", async () => {
+    const current = await getConfig();
+    const selected = getSelectedVoices().map((v, idx) => ({
+      voiceName: v.voiceName,
+      lang: v.lang,
+      order: idx + 1,
+    }));
+    const next = {
+      ...current,
+      tts: {
+        ...(current.tts || {}),
+        savedVoices: selected,
+      },
+    };
+    await saveConfig(next);
+    if (statusEl) {
+      statusEl.textContent = `Saved ${selected.length} voices`;
+      statusEl.style.color = "green";
+    }
+  });
+
   downloadEachBtn?.addEventListener("click", async () => {
     const text = textInput?.value?.trim();
     if (!text) {
       if (statusEl) statusEl.textContent = "Enter text first";
       return;
     }
-    const selected = getSelectedVoices();
-    const list = selected.length ? selected : [{ voiceName: voices[0]?.voiceName, lang: voices[0]?.lang || "en-US" }];
+    const list = getSelectedVoices();
     for (const [idx, v] of list.entries()) {
       const url = await buildTtsUrl(text, v.lang);
+      const res = await fetchWithTimeout(url, 5000);
+      if (!res.ok) continue;
+      const blob = await res.blob();
       const a = document.createElement("a");
-      a.href = url;
+      a.href = URL.createObjectURL(blob);
       a.download = `tts_${(v.voiceName || v.lang || "voice").replace(/[^a-z0-9_-]/gi, "_")}_${idx + 1}.mp3`;
       document.body.appendChild(a);
       a.click();
       a.remove();
+      URL.revokeObjectURL(a.href);
       await new Promise((r) => setTimeout(r, 150));
     }
     if (statusEl) statusEl.textContent = "Downloaded files";
@@ -239,8 +380,7 @@ async function setupAudioPanel() {
       if (statusEl) statusEl.textContent = "Enter text first";
       return;
     }
-    const selected = getSelectedVoices();
-    const list = selected.length ? selected : [{ voiceName: voices[0]?.voiceName, lang: voices[0]?.lang || "en-US" }];
+    const list = getSelectedVoices();
     if (!window.JSZip) {
       statusEl.textContent = "JSZip not loaded";
       statusEl.style.color = "red";
@@ -250,7 +390,8 @@ async function setupAudioPanel() {
     const zip = new JSZip();
     for (const [idx, v] of list.entries()) {
       const url = await buildTtsUrl(text, v.lang);
-      const res = await fetch(url);
+      const res = await fetchWithTimeout(url, 5000);
+      if (!res.ok) continue;
       const buf = await res.arrayBuffer();
       const fname = `tts_${(v.voiceName || v.lang || "voice").replace(/[^a-z0-9_-]/gi, "_")}_${idx + 1}.mp3`;
       zip.file(fname, buf);
@@ -265,7 +406,7 @@ async function setupAudioPanel() {
     statusEl.textContent = "Zip downloaded";
   });
 
-  updateSelectionCount();
+  renderTesterVoices();
 }
 
 async function setupDictionaryPanel() {
@@ -432,6 +573,9 @@ async function saveGeneralSettings(statusId) {
     const maxDisplay = clampInt(document.getElementById("forvoMaxDisplay")?.value, 1, 3, 3);
     const autoplayCountRaw = clampInt(document.getElementById("forvoAutoplayCount")?.value, 0, 3, 1);
     const autoplayCount = Math.min(autoplayCountRaw, maxDisplay);
+    const ttsMaxDisplay = clampInt(document.getElementById("ttsMaxDisplay")?.value, 1, 3, 1);
+    const ttsAutoplayRaw = clampInt(document.getElementById("ttsAutoplayCount")?.value, 0, 3, 0);
+    const ttsAutoplayCount = Math.min(ttsAutoplayRaw, ttsMaxDisplay);
 
     const newGeneralConfig = {
       ...currentGeneralConfig,
@@ -459,7 +603,13 @@ async function saveGeneralSettings(statusId) {
           document.getElementById("voice1")?.value,
           document.getElementById("voice2")?.value,
           document.getElementById("voice3")?.value,
-        ]
+        ],
+        preferredLang: currentGeneralConfig.tts?.preferredLang || "en-US",
+        maxDisplay: ttsMaxDisplay,
+        autoplayCount: ttsAutoplayCount,
+        savedVoices: Array.isArray(currentGeneralConfig.tts?.savedVoices)
+          ? currentGeneralConfig.tts.savedVoices
+          : [],
       }
     };
     await saveConfig(newGeneralConfig);
@@ -562,13 +712,14 @@ async function renderResources() {
     );
   };
 
-  const renderGroup = (title, list) => {
+  const renderGroup = (title, kind, list) => {
     const rows = list
       .map(
         (r) => `
-        <div class="resource-row" data-id="${r.id}">
+        <div class="resource-row" data-id="${r.id}" data-kind="${kind}" draggable="true">
           <div class="resource-main">
             <div class="resource-left">
+              <button class="btn resource-drag" type="button" title="Drag to reorder">Drag</button>
               <label style="display:flex;align-items:center;gap:8px;">
                 <input type="checkbox" data-field="enabled" ${r.enabled ? "checked" : ""}/>
               </label>
@@ -597,7 +748,50 @@ async function renderResources() {
   const freqs = resources.filter((r) => r.kind === "frequency");
 
   container.innerHTML =
-    renderGroup("Dictionaries", dicts) + renderGroup("Frequencies", freqs);
+    renderGroup("Dictionaries", "dictionary", dicts) + renderGroup("Frequencies", "frequency", freqs);
+
+  async function persistOrderByKind(kind) {
+    const ids = Array.from(
+      container.querySelectorAll(`.resource-row[data-kind="${kind}"]`),
+    ).map((row) => row.dataset.id);
+    if (ids.length === 0) return;
+    const resourcesNow = await listResources();
+    for (let index = 0; index < ids.length; index += 1) {
+      const id = ids[index];
+      const existing = resourcesNow.find((r) => r.id === id);
+      if (!existing) continue;
+      await putResource({
+        ...existing,
+        priority: index + 1,
+        updatedAt: Date.now(),
+      });
+    }
+  }
+
+  let draggingRowId = null;
+  container.querySelectorAll(".resource-row").forEach((row) => {
+    row.addEventListener("dragstart", () => {
+      draggingRowId = row.dataset.id;
+      row.classList.add("is-dragging");
+    });
+    row.addEventListener("dragend", () => {
+      row.classList.remove("is-dragging");
+      draggingRowId = null;
+    });
+    row.addEventListener("dragover", (e) => e.preventDefault());
+    row.addEventListener("drop", async (e) => {
+      e.preventDefault();
+      const targetId = row.dataset.id;
+      const kind = row.dataset.kind;
+      if (!draggingRowId || draggingRowId === targetId) return;
+      const draggingRow = container.querySelector(`.resource-row[data-id="${draggingRowId}"]`);
+      const targetRow = container.querySelector(`.resource-row[data-id="${targetId}"]`);
+      if (!draggingRow || !targetRow || draggingRow.dataset.kind !== targetRow.dataset.kind) return;
+      targetRow.parentNode.insertBefore(draggingRow, targetRow);
+      await persistOrderByKind(kind);
+      await renderResources();
+    });
+  });
 
   container.oninput = (e) => {
     const row = e.target.closest(".resource-row");
@@ -778,6 +972,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("forvoMaxDisplay")?.addEventListener("change", autoSaveAudio);
   document.getElementById("forvoAutoplayCount")?.addEventListener("change", autoSaveAudio);
   document.getElementById("ttsEnabled")?.addEventListener("change", autoSaveAudio);
+  document.getElementById("ttsMaxDisplay")?.addEventListener("change", autoSaveAudio);
+  document.getElementById("ttsAutoplayCount")?.addEventListener("change", autoSaveAudio);
   document.getElementById("voice1")?.addEventListener("change", autoSaveAudio);
   document.getElementById("voice2")?.addEventListener("change", autoSaveAudio);
   document.getElementById("voice3")?.addEventListener("change", autoSaveAudio);

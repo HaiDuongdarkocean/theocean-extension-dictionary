@@ -27,7 +27,7 @@
 
 .yomitan-popup-stack {
   position: fixed !important;
-  width: 320px !important;
+  width: 320px;
   background: var(--yomi-bg) !important;
   border: 1px solid var(--yomi-border) !important;
   border-radius: 12px !important;
@@ -38,7 +38,6 @@
   flex-direction: column !important;
   animation: yomiPop 0.2s cubic-bezier(0.2, 0, 0.2, 1);
   pointer-events: auto !important;
-  position: fixed !important;
   box-sizing: border-box !important;
   padding-bottom: 14px !important;
 }
@@ -228,6 +227,43 @@
 
 .yomi-tts-btn:hover {
   filter: brightness(0.96);
+}
+
+.yomi-tts-section .yomi-tts-play-all {
+  border: 1px solid var(--yomi-primary);
+  background: var(--yomi-primary-soft);
+  color: var(--yomi-primary);
+  border-radius: 8px;
+  font-size: 11px;
+  padding: 4px 8px;
+  cursor: pointer;
+}
+
+.yomi-tts-section .yomi-tts-group {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.yomi-tts-section .yomi-tts-group::-webkit-scrollbar {
+  height: 4px;
+}
+
+.yomi-tts-section .yomi-tts-group::-webkit-scrollbar-thumb {
+  background: var(--yomi-primary-soft);
+  border-radius: 999px;
+}
+
+.yomi-tts-audio-btn {
+  border: 1px solid var(--yomi-border);
+  background: var(--yomi-surface);
+  color: var(--yomi-text-main);
+  border-radius: 8px;
+  padding: 4px 8px;
+  font-size: 11px;
+  white-space: nowrap;
+  cursor: pointer;
 }
 
 .yomi-view-browser-btn {

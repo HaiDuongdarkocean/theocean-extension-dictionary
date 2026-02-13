@@ -74,7 +74,17 @@ function processAudioList(rawList) {
 
 async function fetchAudioFromForvo(term) {
     return new Promise((resolve) => {
+        let done = false;
+        const timer = setTimeout(() => {
+            if (done) return;
+            done = true;
+            resolve([]);
+        }, 5000);
+
         chrome.runtime.sendMessage({ action: "fetchForvo", term: term }, (response) => {
+            if (done) return;
+            done = true;
+            clearTimeout(timer);
 
             if (!response || !response.success) {
                 resolve([]);

@@ -9,6 +9,16 @@ import { lookupTermWithFreq } from "./storage.js";
 
 console.log("Background Service Worker đang chạy...");
 
+async function fetchWithTimeout(url, options = {}, timeoutMs = 5000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === "search_word") {
     getConfig()
@@ -145,7 +155,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   // Fetch audio từ Forvo
   if (request.action === "fetchForvo") {
     console.log("Đang đi chợ lấy từ:", request.term); // Dòng này để debug
-    fetch(`https://forvo.com/word/${request.term}/#en`)
+    fetchWithTimeout(`https://forvo.com/word/${request.term}/#en`, {}, 5000)
       .then((response) => {
         console.log("Kết quả HTTP:", response.status);
         return response.text();
@@ -213,12 +223,12 @@ async function fetchImagesFromGoogle(term) {
   try {
     // Tăng quy mô tìm kiếm để có nhiều ảnh hơn
     const url = `https://www.google.com/search?q=${encodeURIComponent(term)}&tbm=isch`;
-    const response = await fetch(url, {
+    const response = await fetchWithTimeout(url, {
       headers: {
         "User-Agent":
           "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
       },
-    });
+    }, 5000);
     const html = await response.text();
 
     // Regex quét các URL ảnh (thường nằm trong mảng JSON trong mã nguồn Google)
@@ -366,7 +376,7 @@ async function uploadImageToAnki(filename, base64) {
 }
 
 async function downloadAudioAsBase64(url) {
-  const res = await fetch(url);
+  const res = await fetchWithTimeout(url, {}, 5000);
   console.log("Download audio response:", res);
   const blob = await res.blob();
   console.log("Blob:", blob);

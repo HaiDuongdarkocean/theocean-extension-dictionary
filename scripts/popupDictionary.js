@@ -98,13 +98,14 @@ async function fetchUserConfig() {
   });
 }
 
-async function playTtsSentence(text) {
+async function playTtsSentence(text, overrideVoiceName = "") {
   if (!text) return;
   const res = await fetchUserConfig();
   const cfg = res?.config || {};
   const ttsCfg = cfg.tts || {};
   if (ttsCfg.enabled === false) return;
   const voiceName =
+    overrideVoiceName ||
     (ttsCfg.voices || []).find((v) => v) ||
     ttsCfg.preferredLang ||
     undefined;
@@ -286,6 +287,27 @@ function attachAudioEvents(popup) {
   });
 }
 
+async function runtimeMessageWithTimeout(message, timeoutMs = 5000) {
+  return new Promise((resolve, reject) => {
+    let done = false;
+    const timer = setTimeout(() => {
+      if (done) return;
+      done = true;
+      reject(new Error("timeout"));
+    }, timeoutMs);
+    chrome.runtime.sendMessage(message, (response) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      if (chrome.runtime.lastError) {
+        reject(chrome.runtime.lastError);
+      } else {
+        resolve(response);
+      }
+    });
+  });
+}
+
 function stopAllAudios(popup) {
   if (!popup._currentAudios) return;
 
@@ -394,6 +416,81 @@ function applyDefinitionUIState(popup) {
   if (nodes[state.focusedDefIndex]) {
     nodes[state.focusedDefIndex].scrollIntoView({ block: "nearest", behavior: "smooth" });
   }
+}
+
+function getTtsVoiceRows(ttsCfg) {
+  const saved = Array.isArray(ttsCfg?.savedVoices) ? ttsCfg.savedVoices.slice() : [];
+  if (saved.length > 0) {
+    return saved
+      .slice()
+      .sort((a, b) => (Number(a.order) || 9999) - (Number(b.order) || 9999))
+      .map((item) => ({
+        voiceName: item.voiceName || "",
+        lang: item.lang || "",
+      }))
+      .filter((item) => item.voiceName);
+  }
+  const fallback = Array.isArray(ttsCfg?.voices) ? ttsCfg.voices : [];
+  return fallback
+    .filter(Boolean)
+    .map((voiceName) => ({ voiceName, lang: "" }));
+}
+
+function renderPopupTtsGroup(popup, sentence, ttsCfg) {
+  const section = popup.querySelector(".yomi-tts-section");
+  const container = popup.querySelector(".yomi-tts-group");
+  if (!section || !container) return;
+  if (!sentence || ttsCfg?.enabled === false) {
+    section.style.display = "none";
+    container.innerHTML = "";
+    return;
+  }
+
+  const voices = getTtsVoiceRows(ttsCfg);
+  if (voices.length === 0) {
+    section.style.display = "none";
+    container.innerHTML = "";
+    return;
+  }
+
+  const maxDisplay = Math.max(1, Math.min(3, Number(ttsCfg?.maxDisplay) || 1));
+  const autoplayCount = Math.max(0, Math.min(maxDisplay, Number(ttsCfg?.autoplayCount) || 0));
+  const visibleVoices = voices.slice(0, maxDisplay);
+  popup._ttsVoices = visibleVoices;
+  popup._ttsFocused = 0;
+
+  container.innerHTML = visibleVoices
+    .map((voice, index) => {
+      const label = voice.voiceName || `Voice ${index + 1}`;
+      return `<button class="yomi-tts-audio-btn" type="button" data-index="${index}" title="${label} [${getShortcutLabel("ttsSentence")}]">${label}</button>`;
+    })
+    .join("");
+
+  const playAllBtn = section.querySelector(".yomi-tts-play-all");
+  if (playAllBtn) {
+    playAllBtn.onclick = () => {
+      visibleVoices.forEach((voice, idx) => {
+        setTimeout(() => playTtsSentence(sentence, voice.voiceName), idx * 350);
+      });
+    };
+  }
+
+  container.querySelectorAll(".yomi-tts-audio-btn").forEach((btn) => {
+    btn.onclick = () => {
+      const idx = Number(btn.getAttribute("data-index"));
+      popup._ttsFocused = Number.isNaN(idx) ? 0 : idx;
+      const voice = visibleVoices[popup._ttsFocused];
+      if (voice) playTtsSentence(sentence, voice.voiceName);
+    };
+  });
+
+  if (autoplayCount > 0) {
+    visibleVoices.slice(0, autoplayCount).forEach((voice, idx) => {
+      setTimeout(() => playTtsSentence(sentence, voice.voiceName), 260 + idx * 350);
+    });
+  }
+
+  section.style.display = "";
 }
 
 function renderDefinitionBlocks(popup, data) {
@@ -618,15 +715,23 @@ function handlePopupShortcutKeydown(event) {
   if (action === "audioPrev") moveAudioFocus(activePopup, -1);
   if (action === "audioSelect") toggleFocusedAudioSelection(activePopup);
   if (action === "ttsSentence") {
-    const sentenceText =
-      activePopup._cardData?.sentence ||
-      activePopup._cardData?.term ||
-      "";
-    playTtsSentence(sentenceText);
+    const sentenceText = activePopup._cardData?.sentence || activePopup._cardData?.term || "";
+    const ttsVoices = Array.isArray(activePopup._ttsVoices) ? activePopup._ttsVoices : [];
+    const focus = Number(activePopup._ttsFocused || 0);
+    const voice = ttsVoices[Math.max(0, Math.min(ttsVoices.length - 1, focus))];
+    playTtsSentence(sentenceText, voice?.voiceName || "");
+  }
+  if (action === "viewBrowser") {
+    const viewBtn = activePopup.querySelector(".yomi-view-browser-btn");
+    if (viewBtn) viewBtn.click();
+  }
+  if (action === "updateCard") {
+    const updateBtn = activePopup.querySelector(".yomi-update-anki-btn");
+    if (updateBtn) updateBtn.click();
   }
   if (action === "addToAnki") {
     const payload = buildAnkiPayload(activePopup._cardData || {}, activePopup);
-    addNoteToAnki(payload);
+    addNoteToAnki(payload, activePopup);
   }
 }
 
@@ -650,11 +755,13 @@ async function addNoteToAnki(dataOfCard, popup) {
       const addBtn = popup?.querySelector(".yomi-add-anki-btn");
       if (response.duplicate) {
         if (addBtn) {
-          addBtn.textContent = "Already added";
+          addBtn.textContent = "Added";
           addBtn.disabled = true;
           ensureUpdateButton(popup, () => updateExistingAnkiCard(dataOfCard, response.noteIds?.[0], popup));
         }
-        if (uiCfg.showBrowserButton !== false) showBrowserButton(popup, response.noteIds);
+        if (uiCfg.showBrowserButton !== false) {
+          showBrowserButton(popup, response.noteIds, false, "Already added in Anki");
+        }
         return;
       }
 
@@ -662,9 +769,9 @@ async function addNoteToAnki(dataOfCard, popup) {
         if (uiCfg.showBrowserButton !== false) {
           if (addBtn) {
             addBtn.textContent = "View Browser";
-            addBtn.onclick = () => showBrowserButton(popup, response.noteIds, true);
+            addBtn.onclick = () => showBrowserButton(popup, response.noteIds, true, "");
           }
-          showBrowserButton(popup, response.noteIds);
+          showBrowserButton(popup, response.noteIds, false, "");
         } else {
           alert("✅ Đã thêm vào Anki!");
         }
@@ -675,7 +782,7 @@ async function addNoteToAnki(dataOfCard, popup) {
   );
 }
 
-function showBrowserButton(popup, noteIds = [], forceClick = false) {
+function showBrowserButton(popup, noteIds = [], forceClick = false, message = "") {
   if (!popup) return;
   popup._ankiNoteIds = noteIds;
   const query =
@@ -690,6 +797,7 @@ function showBrowserButton(popup, noteIds = [], forceClick = false) {
     const header = popup.querySelector(".yomi-header > div");
     if (header) header.appendChild(viewBtn);
   }
+  viewBtn.title = message ? `${message} [${getShortcutLabel("viewBrowser")}]` : `View Browser [${getShortcutLabel("viewBrowser")}]`;
   viewBtn.onclick = () => {
     chrome.runtime.sendMessage(
       { action: "openAnkiBrowser", query },
@@ -709,6 +817,7 @@ function ensureUpdateButton(popup, handler) {
     const header = popup.querySelector(".yomi-header > div");
     if (header) header.appendChild(btn);
   }
+  btn.title = `Update card [${getShortcutLabel("updateCard")}]`;
   btn.onclick = handler;
   btn.disabled = false;
 }
@@ -777,9 +886,6 @@ async function showPopup(x, y, data, level) {
                 <div class="yomi-audio-group">
                     <span style="opacity: 0.5">Audio pending...</span>
                 </div>
-                <div class="yomi-tts-sentence" style="margin-left:8px;">
-                  <button class="yomi-tts-btn" title="Play sentence [${getShortcutLabel("ttsSentence")}]">TTS</button>
-                </div>
             </div>
         </div>
 
@@ -796,6 +902,13 @@ async function showPopup(x, y, data, level) {
         }
 
         ${sentenceHTML}
+        <div class="yomi-tts-section" style="padding: 8px 16px; border-top: 1px solid var(--yomi-border); display:none;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+            <span style="font-size:11px; color: var(--yomi-text-sub);">TTS sentence</span>
+            <button class="yomi-tts-play-all" type="button">Play all audios</button>
+          </div>
+          <div class="yomi-tts-group"></div>
+        </div>
 
 
         <div class="definition-container">
@@ -814,6 +927,10 @@ async function showPopup(x, y, data, level) {
   if (savedSize?.width) newPopup.style.width = `${savedSize.width}px`;
   if (savedSize?.height) newPopup.style.height = `${savedSize.height}px`;
 
+  const userCfgRes = await fetchUserConfig();
+  const popupCfg = userCfgRes?.config || {};
+  renderPopupTtsGroup(newPopup, data.sentence || "", popupCfg.tts || {});
+
   // Gắn sự kiện Add to Anki
   const addBtn = newPopup.querySelector(".yomi-add-anki-btn");
 
@@ -822,14 +939,6 @@ async function showPopup(x, y, data, level) {
       e.stopPropagation();
       const payload = buildAnkiPayload(data, newPopup);
       addNoteToAnki(payload, newPopup);
-    });
-  }
-
-  const ttsBtn = newPopup.querySelector(".yomi-tts-btn");
-  if (ttsBtn) {
-    ttsBtn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      playTtsSentence(data.sentence || data.term || "");
     });
   }
 
@@ -919,19 +1028,33 @@ async function showPopup(x, y, data, level) {
     let allImageUrls = [];
     let visibleImageCount = 0;
     const gallery = newPopup.querySelector(".yomi-image-gallery");
-  const loadMoreBtn = newPopup.querySelector(".yomi-load-more-img");
-  newPopup._allImageUrls = [];
+    const loadMoreBtn = newPopup.querySelector(".yomi-load-more-img");
+    newPopup._allImageUrls = [];
 
-  function renderImages() {
-    const nextBatch = allImageUrls.slice(
-      visibleImageCount,
-      visibleImageCount + 3,
-    );
-    nextBatch.forEach((url) => {
-      const img = document.createElement("img");
-      img.src = url;
-      img.className = "yomi-thumb";
-      img.title = `Image [${getShortcutLabel("imageNext")}/${getShortcutLabel("imagePrev")}] • Select [${getShortcutLabel("imageSelect")}]`;
+    function reindexImages() {
+      gallery.querySelectorAll(".yomi-thumb").forEach((img, idx) => {
+        img.setAttribute("data-image-index", String(idx));
+      });
+    }
+
+    function renderImages() {
+      const nextBatch = allImageUrls.slice(
+        visibleImageCount,
+        visibleImageCount + 3,
+      );
+      nextBatch.forEach((url) => {
+        const img = document.createElement("img");
+        img.src = url;
+        img.className = "yomi-thumb";
+        img.title = `Image [${getShortcutLabel("imageNext")}/${getShortcutLabel("imagePrev")}] • Select [${getShortcutLabel("imageSelect")}]`;
+        img.onerror = () => {
+          allImageUrls = allImageUrls.filter((candidate) => candidate !== url);
+          newPopup._allImageUrls = allImageUrls.slice();
+          img.remove();
+          visibleImageCount = Math.min(visibleImageCount, allImageUrls.length);
+          reindexImages();
+          applyImageFocus(newPopup);
+        };
 
         // Sự kiện khi nhấn chọn ảnh
         img.onclick = () => {
@@ -940,14 +1063,12 @@ async function showPopup(x, y, data, level) {
           toggleFocusedImageSelection(newPopup);
         };
 
-        const imageIndex = visibleImageCount + gallery.querySelectorAll(".yomi-thumb").length;
-        img.setAttribute("data-image-index", String(imageIndex));
-
         gallery.appendChild(img);
       });
 
       visibleImageCount += nextBatch.length;
       newPopup._allImageUrls = allImageUrls.slice();
+      reindexImages();
 
       // Hiện/Ẩn nút "Xem thêm"
       if (visibleImageCount < allImageUrls.length) {
@@ -962,15 +1083,20 @@ async function showPopup(x, y, data, level) {
     }
 
     // Gọi lấy dữ liệu
-    chrome.runtime.sendMessage(
-      { action: "fetchImages", term: data.term },
-      (res) => {
-        if (res && res.success && res.urls.length > 0) {
-          allImageUrls = res.urls;
+    runtimeMessageWithTimeout({ action: "fetchImages", term: data.term }, 5000)
+      .then((res) => {
+        if (res && res.success && Array.isArray(res.urls) && res.urls.length > 0) {
+          allImageUrls = res.urls.slice();
           renderImages(); // Hiện 3 cái đầu
+        } else {
+          gallery.innerHTML = "";
+          loadMoreBtn.style.display = "none";
         }
-      },
-    );
+      })
+      .catch(() => {
+        gallery.innerHTML = "";
+        loadMoreBtn.style.display = "none";
+      });
 
     loadMoreBtn.onclick = () => renderImages();
   } else {

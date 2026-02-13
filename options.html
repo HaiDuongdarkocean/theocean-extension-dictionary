@@ -36,7 +36,7 @@
           </div>
 
           <div class="grid">
-            <div class="card tts-tester">
+            <div class="card">
               <div class="card__header">
                 <h2 class="card__title">Import Dictionary</h2>
               </div>
@@ -334,6 +334,17 @@
                 </div>
 
                 <div class="row">
+                  <div class="row__label">Show buttons</div>
+                  <div class="row__control">
+                    <select id="ttsMaxDisplay">
+                      <option value="1">1</option>
+                      <option value="2">2</option>
+                      <option value="3">3</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div class="row">
                   <div class="row__label">Voice 1</div>
                   <div class="row__control"><select id="voice1"></select></div>
                 </div>
@@ -346,13 +357,25 @@
                   <div class="row__control"><select id="voice3"></select></div>
                 </div>
 
+                <div class="row">
+                  <div class="row__label">Autoplay</div>
+                  <div class="row__control">
+                    <select id="ttsAutoplayCount">
+                      <option value="0">0</option>
+                      <option value="1">1</option>
+                      <option value="2">2</option>
+                      <option value="3">3</option>
+                    </select>
+                  </div>
+                </div>
+
                 <div class="actions">
                   <span class="status" id="audioSaveStatus"></span>
                 </div>
               </div>
             </div>
 
-            <div class="card">
+            <div class="card tts-tester">
               <div class="card__header">
                 <h2 class="card__title">TTS Tester</h2>
               </div>
@@ -364,14 +387,15 @@
                   </div>
                 </div>
 
-                <div class="row" style="align-items:flex-start;">
+                <div class="row tts-flex-row">
                   <div class="row__label">Voices</div>
-                  <div class="row__control" style="width:100%;">
+                  <div class="row__control">
                     <div class="tts-header">
                       <button class="btn" id="ttsClearSelection" type="button">Delete selection (0)</button>
-                      <div style="display:flex; gap:8px; flex-wrap:wrap;">
-                        <button class="btn btn--primary" id="ttsPlayBtn" type="button">Play audio</button>
-                        <button class="btn" id="ttsDownloadEachBtn" type="button">Download mp3 (each)</button>
+                      <div class="tts-header__actions">
+                        <button class="btn btn--primary" id="ttsPlayBtn" type="button">Play all audios</button>
+                        <button class="btn" id="ttsSaveVoiceListBtn" type="button">Save TTS voice list</button>
+                        <button class="btn" id="ttsDownloadEachBtn" type="button">Download each mp3</button>
                         <button class="btn" id="ttsDownloadZipBtn" type="button">Download zip</button>
                       </div>
                     </div>
