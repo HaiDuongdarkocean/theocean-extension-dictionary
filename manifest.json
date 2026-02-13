@@ -1,8 +1,8 @@
 {
     "manifest_version": 3,
-    "name": "Yomitan Simulate Pro",
+    "name": "The0cean",
     "version": "1.0",
-    "description": "Mô phỏng tra từ điển bằng cách di chuột như Yomitan",
+    "description": "A multifunctional extension for language learners to look up words, get translations, hear pronunciations, and more.",
     "permissions": [
         "tts",
         "storage",

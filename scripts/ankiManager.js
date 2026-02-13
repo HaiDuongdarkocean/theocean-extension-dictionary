@@ -88,13 +88,13 @@ async function addNoteToAnki(extensionData) {
     });
 
     if (result.error) {
-      alert("❌ Anki lỗi: " + result.error);
+      alert("😵 Anki lỗi: " + result.error);
     } else {
       alert("✅ Đã thêm vào Anki!");
     }
 
   } catch (err) {
-    alert("❌ Không kết nối được Anki");
+    alert("😵 Không kết nối được Anki");
   }
 }
 

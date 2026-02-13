@@ -13,6 +13,7 @@ const DEFAULT_CONFIG = {
     },
     translateEnabled: false,
     lookupMode: "hover",
+    lookupResultMode: "stacked", // "stacked" | "first_match"
     forvo: {
         enabled: true,
         mode: "auto", // "auto" | "manual"

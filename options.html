@@ -1,16 +1,18 @@
 <!doctype html>
 <html>
   <head>
-    <title>Yomitan Simulate Pro - Settings</title>
+    <title>The0cean - Settings</title>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link rel="stylesheet" href="style/options.css" />
   </head>
   <body>
+    <script src="scripts/vendor.jszip.min.js"></script>
     <div class="app">
+      <div class="app__inner">
       <aside class="nav">
         <div class="brand">
-          <p class="brand__title">Yomitan Simulate Pro</p>
+          <p class="brand__title">The0cean</p>
           <p class="brand__sub">Settings</p>
         </div>
 
@@ -40,7 +42,11 @@
                 <div class="row">
                   <div class="row__label">JSON file</div>
                   <div class="row__control">
-                    <input type="file" id="dictFile" accept=".json" />
+                    <input type="file" id="dictFile" accept=".json,.zip" class="file__input" />
+                    <label class="file" for="dictFile">
+                      <span class="file__btn">Choose file</span>
+                      <span class="file__name" id="dictFileName">No file selected</span>
+                    </label>
                     <button class="btn btn--primary" id="importBtn" type="button">Import</button>
                   </div>
                 </div>
@@ -66,10 +72,45 @@
                 </div>
                 <p class="hint">When not set to Hover, popup only appears while the key is held.</p>
 
+                <div class="row">
+                  <div class="row__label">Result mode</div>
+                  <div class="row__control">
+                    <select id="lookupResultMode">
+                      <option value="stacked">Stacked (show all dictionaries)</option>
+                      <option value="first_match">First match (top priority)</option>
+                    </select>
+                  </div>
+                </div>
+                <p class="hint">Stacked mode shows definitions from multiple enabled dictionaries.</p>
+
                 <div class="actions">
-                  <button class="btn btn--primary" id="saveDictionaryBtn" type="button">Save</button>
                   <span class="status" id="dictionarySaveStatus"></span>
                 </div>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card__header">
+                <h2 class="card__title">Resources</h2>
+              </div>
+              <div class="card__body">
+                <div id="resourceList"></div>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card__header">
+                <h2 class="card__title">Test Lookup</h2>
+              </div>
+              <div class="card__body">
+                <div class="row">
+                  <div class="row__label">Term</div>
+                  <div class="row__control">
+                    <input type="text" id="lookupInput" placeholder="Enter term" />
+                    <button class="btn btn--primary" id="lookupTestBtn" type="button">Test</button>
+                  </div>
+                </div>
+                <div id="lookupResult" class="status"></div>
               </div>
             </div>
           </div>
@@ -86,7 +127,10 @@
           <div class="grid">
             <div class="card">
               <div class="card__header">
-                <h2 class="card__title">Connection</h2>
+                <h2 class="card__title">
+                  <div>Connection</div> 
+                  <span class="status" id="ankiStatus"></span>
+                </h2>
               </div>
               <div class="card__body">
                 <div class="row">
@@ -105,8 +149,7 @@
                 <div id="fieldMappingContainer"></div>
 
                 <div class="actions">
-                  <button class="btn btn--primary" id="saveAnkiSettings" type="button">Save</button>
-                  <span class="status" id="ankiStatus"></span>
+                  <span class="status" id="ankiSaveStatus"></span>
                 </div>
               </div>
             </div>
@@ -137,7 +180,6 @@
                 <p class="hint">Uses Google Translate web endpoint.</p>
 
                 <div class="actions">
-                  <button class="btn btn--primary" id="saveTranslationBtn" type="button">Save</button>
                   <span class="status" id="translationSaveStatus"></span>
                 </div>
               </div>
@@ -230,7 +272,6 @@
                 </div>
 
                 <div class="actions">
-                  <button class="btn btn--primary" id="saveAudioBtn" type="button">Save</button>
                   <span class="status" id="audioSaveStatus"></span>
                 </div>
               </div>
@@ -238,6 +279,7 @@
           </div>
         </section>
       </main>
+      </div>
     </div>
 
     <script type="module" src="scripts/options.js"></script>

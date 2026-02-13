@@ -262,14 +262,14 @@ function addNoteToAnki(dataOfCard) {
     (response) => {
       console.log("PopupDrictionary.js::addNoteToAnki responed:", response);
       if (!response) {
-        alert("❌ Không kết nối được Anki");
+        alert("😵 Không kết nối được Anki");
         return;
       }
 
       if (response.success) {
         alert("✅ Đã thêm vào Anki!");
       } else {
-        alert("❌ Lỗi: " + response.error);
+        alert("😵 Lỗi: " + response.error);
       }
     },
   );

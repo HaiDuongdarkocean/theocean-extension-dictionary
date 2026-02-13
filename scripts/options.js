@@ -2,7 +2,6 @@
  * options.js 
  * Quản lý toàn bộ giao diện cài đặt của Yomitan Pro
  */
-import { importDictionary } from "./database.js";
 import { getConfig, saveConfig } from "./configManager.js";
 import { TTSModule } from "./ttsModule.js";
 import {
@@ -12,6 +11,14 @@ import {
   getModelNames,
   getModelFieldNames,
 } from "./ankiSettings.js";
+import { importFile } from "./importManager.js";
+import {
+  listResources,
+  putResource,
+  deleteResource,
+  clearResourceData,
+  lookupTermWithFreq,
+} from "./storage.js";
 
 // --- 1. KHỞI TẠO CÁC BIẾN CẤU CẤU HÌNH MẶC ĐỊNH ---
 const EXTENSION_FIELDS = [
@@ -73,10 +80,10 @@ async function setupAnkiPanel() {
       renderFieldMappingTable(fields, {});
     };
 
-    ankiStatus.innerText = "✅ Kết nối Anki thành công.";
+    ankiStatus.innerText = "💚 Kết nối Anki thành công";
   } catch (err) {
     console.error("Anki Error:", err);
-    ankiStatus.innerHTML = "<b style='color:red'>❌ Không kết nối được Anki. Hãy mở Anki Desktop và bật AnkiConnect.</b>";
+    ankiStatus.innerHTML = "<b style='color:red'>😵 Không kết nối được Anki. Hãy mở Anki Desktop và bật AnkiConnect.</b>";
   }
 }
 
@@ -135,6 +142,10 @@ async function setupDictionaryPanel() {
   if (lookupModeSelect) {
     lookupModeSelect.value = config.lookupMode || "hover";
   }
+  const resultModeSelect = document.getElementById("lookupResultMode");
+  if (resultModeSelect) {
+    resultModeSelect.value = config.lookupResultMode || "stacked";
+  }
 }
 
 async function setupTranslationPanel() {
@@ -160,6 +171,8 @@ async function saveGeneralSettings(statusId) {
     const newGeneralConfig = {
       ...currentGeneralConfig,
       lookupMode: document.getElementById("lookupMode")?.value || "hover",
+      lookupResultMode:
+        document.getElementById("lookupResultMode")?.value || "stacked",
       translateEnabled: document.getElementById("enableTranslate")?.checked || false,
       forvo: {
         enabled: document.getElementById("forvoEnabled")?.checked ?? true,
@@ -179,9 +192,11 @@ async function saveGeneralSettings(statusId) {
     await saveConfig(newGeneralConfig);
 
     const statusEl = document.getElementById(statusId);
-    statusEl.innerText = "✅ Đã lưu tất cả cài đặt!";
-    statusEl.style.color = "green";
-    setTimeout(() => (statusEl.innerText = ""), 2000);
+    if (statusEl) {
+      statusEl.innerText = "Saved";
+      statusEl.style.color = "green";
+      setTimeout(() => (statusEl.innerText = ""), 1200);
+    }
     
   } catch (err) {
     alert("Có lỗi khi lưu: " + err.message);
@@ -210,12 +225,210 @@ async function saveAnkiSettings(statusId) {
     await saveAnkiConfig(ankiConfig);
 
     const statusEl = document.getElementById(statusId);
-    statusEl.innerText = "✅ Đã lưu!";
-    statusEl.style.color = "green";
-    setTimeout(() => (statusEl.innerText = ""), 2000);
+    if (statusEl) {
+      statusEl.innerText = "Saved";
+      statusEl.style.color = "green";
+      setTimeout(() => (statusEl.innerText = ""), 1200);
+    }
   } catch (err) {
     alert("Có lỗi khi lưu Anki: " + err.message);
   }
+}
+
+function debounce(fn, waitMs) {
+  let timer = null;
+  return (...args) => {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(() => fn(...args), waitMs);
+  };
+}
+
+async function renderResources() {
+  const container = document.getElementById("resourceList");
+  if (!container) return;
+
+  const resources = await listResources();
+  resources.sort((a, b) => (a.priority || 0) - (b.priority || 0));
+
+  const autoSaveTimers = new Map();
+  const scheduleAutoSave = (resourceId) => {
+    if (autoSaveTimers.has(resourceId)) {
+      clearTimeout(autoSaveTimers.get(resourceId));
+    }
+
+    autoSaveTimers.set(
+      resourceId,
+      setTimeout(async () => {
+        const row = container.querySelector(
+          `.resource-row[data-id="${resourceId}"]`,
+        );
+        if (!row) return;
+
+        const titleInput = row.querySelector('input[data-field="title"]');
+        const enabledInput = row.querySelector('input[data-field="enabled"]');
+        const priorityInput = row.querySelector('input[data-field="priority"]');
+
+        const title = titleInput?.value || "";
+        const enabled = enabledInput?.checked || false;
+        const priority = Number(priorityInput?.value) || 0;
+
+        const resourcesNow = await listResources();
+        const existing = resourcesNow.find((r) => r.id === resourceId);
+        if (!existing) return;
+
+        await putResource({
+          ...existing,
+          title,
+          enabled,
+          priority,
+          updatedAt: Date.now(),
+        });
+      }, 350),
+    );
+  };
+
+  const renderGroup = (title, list) => {
+    const rows = list
+      .map(
+        (r) => `
+        <div class="resource-row" data-id="${r.id}">
+          <div class="resource-main">
+            <div class="resource-left">
+              <label style="display:flex;align-items:center;gap:8px;">
+                <input type="checkbox" data-field="enabled" ${r.enabled ? "checked" : ""}/>
+              </label>
+              <div class="resource-title">
+                <input type="text" data-field="title" value="${r.title || ""}" />
+              </div>
+              <div class="resource-meta">
+                <input class="input--priority" type="number" data-field="priority" value="${r.priority ?? 1}" min="0"/>
+                <button class="btn btn--danger resource-delete" data-action="delete" type="button">Delete</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      `,
+      )
+      .join("");
+    return `
+      <div style="margin-bottom:14px;">
+        <div class="resource-header" style="margin:10px 0 8px 0;">${title}</div>
+        <div class="resource-list">${rows || `<div class="status">No resources.</div>`}</div>
+      </div>
+    `;
+  };
+
+  const dicts = resources.filter((r) => r.kind === "dictionary");
+  const freqs = resources.filter((r) => r.kind === "frequency");
+
+  container.innerHTML =
+    renderGroup("Dictionaries", dicts) + renderGroup("Frequencies", freqs);
+
+  container.oninput = (e) => {
+    const row = e.target.closest(".resource-row");
+    if (!row) return;
+    const resourceId = row.dataset.id;
+    if (!resourceId) return;
+    if (e.target.matches('input[data-field="title"], input[data-field="priority"]')) {
+      scheduleAutoSave(resourceId);
+    }
+  };
+
+  container.onchange = (e) => {
+    const row = e.target.closest(".resource-row");
+    if (!row) return;
+    const resourceId = row.dataset.id;
+    if (!resourceId) return;
+    if (e.target.matches('input[data-field="enabled"]')) {
+      scheduleAutoSave(resourceId);
+    }
+  };
+
+  container.onclick = async (e) => {
+    const btn = e.target.closest("button");
+    if (!btn) return;
+    const row = btn.closest(".resource-row");
+    if (!row) return;
+    const id = row.dataset.id;
+    if (!id) return;
+
+    if (btn.dataset.action === "delete") {
+      if (!confirm("Xóa resource này?")) return;
+      await clearResourceData(id);
+      await deleteResource(id);
+      await renderResources();
+    }
+  };
+}
+
+async function handleLookupTest() {
+  const input = document.getElementById("lookupInput");
+  const output = document.getElementById("lookupResult");
+  if (!input || !output) return;
+  const term = input.value.trim();
+  if (!term) {
+    output.innerText = "Nhập term trước.";
+    return;
+  }
+  output.innerText = "Đang tra...";
+  const config = await getConfig();
+  const mode = config.lookupResultMode === "first_match" ? "first_match" : "stacked";
+  const res = await lookupTermWithFreq(term, { mode, maxDictionaries: 10 });
+
+  const freqText =
+    res.freqs && res.freqs.length
+      ? res.freqs
+          .map(
+            (f) =>
+              `${f.resource.title || f.resource.id}: ${f.entries[0].value} (${f.entries[0].valueType})`,
+          )
+          .join(" | ")
+      : "No frequency";
+
+  if (res.results) {
+    if (res.results.length === 0) {
+      output.innerText = "Không tìm thấy.";
+      return;
+    }
+    const blocks = res.results
+      .map((b) => {
+        const entry = b.entries[0];
+        const atomsHtml = (entry.meaningAtoms || [])
+          .map(
+            (a, idx) =>
+              `<div style="margin-bottom:6px;"><b>${a.head || `#${idx + 1}`}</b> ${a.glossHtml || ""}</div>`,
+          )
+          .join("");
+        return `<div style="margin-bottom:10px;"><div><b>${b.resource.title || b.resource.id}</b></div>${atomsHtml}</div>`;
+      })
+      .join("");
+    output.innerHTML = `
+      <div><b>Mode:</b> stacked</div>
+      <div>${blocks}</div>
+      <div><b>Freq:</b> ${freqText}</div>
+    `;
+    return;
+  }
+
+  const entry = res.entry;
+  const resource = res.resource;
+  if (!entry) {
+    output.innerText = "Không tìm thấy.";
+    return;
+  }
+  const atomsHtml = (entry.meaningAtoms || [])
+    .map(
+      (a, idx) =>
+        `<div style="margin-bottom:6px;"><b>${a.head || `#${idx + 1}`}</b> ${a.glossHtml || ""}</div>`,
+    )
+    .join("");
+  output.innerHTML = `
+    <div><b>Mode:</b> first_match</div>
+    <div><b>Resource:</b> ${resource?.title || resource?.id}</div>
+    <div><b>Term:</b> ${entry.displayTerm || entry.termKey}</div>
+    <div>${atomsHtml}</div>
+    <div><b>Freq:</b> ${freqText}</div>
+  `;
 }
 
 // --- 6. QUẢN LÝ NHẬP TỪ ĐIỂN (DICTIONARY) ---
@@ -223,25 +436,26 @@ function initDictionaryPanel() {
   const importBtn = document.getElementById("importBtn");
   const dictFile = document.getElementById("dictFile");
   const status = document.getElementById("dictStatus");
+  const fileName = document.getElementById("dictFileName");
+
+  if (dictFile && fileName) {
+    dictFile.addEventListener("change", () => {
+      fileName.textContent = dictFile.files?.[0]?.name || "No file selected";
+    });
+  }
 
   importBtn.onclick = async () => {
-    if (!dictFile.files.length) return alert("Chọn file JSON đã con!");
+    if (!dictFile.files.length) return alert("Chọn file JSON/ZIP trước.");
     
     const file = dictFile.files[0];
-    const reader = new FileReader();
-    status.innerText = "🔄 Đang đọc file...";
-
-    reader.onload = async (e) => {
-      try {
-        const jsonData = JSON.parse(e.target.result);
-        status.innerText = "🔄 Đang nạp vào IndexedDB...";
-        await importDictionary(jsonData);
-        status.innerText = `✅ Thành công! Đã nạp ${jsonData.length} từ.`;
-      } catch (err) {
-        status.innerText = "❌ Lỗi: File không đúng định dạng JSON.";
-      }
-    };
-    reader.readAsText(file);
+    status.innerText = "🔄 Đang nhập...";
+    try {
+      const result = await importFile(file);
+      status.innerText = `✅ Nhập xong: ${result.kind}, ${result.count} records.`;
+      await renderResources();
+    } catch (err) {
+      status.innerText = "😵 Lỗi nhập: " + err.message;
+    }
   };
 }
 
@@ -257,17 +471,40 @@ document.addEventListener("DOMContentLoaded", async () => {
   await setupAudioPanel().catch(e => console.log("Audio Panel load fail"));
   await setupDictionaryPanel().catch(e => console.log("Dictionary Panel load fail"));
   await setupTranslationPanel().catch(e => console.log("Translation Panel load fail"));
+  await renderResources().catch(e => console.log("Resource render fail", e));
 
-  // Gán sự kiện cho các nút Lưu
-  const btnAnkiSave = document.getElementById("saveAnkiSettings");
-  if (btnAnkiSave) btnAnkiSave.onclick = () => saveAnkiSettings("ankiStatus");
+  const autoSaveGeneral = debounce(
+    () => saveGeneralSettings("dictionarySaveStatus"),
+    350,
+  );
+  const autoSaveTranslation = debounce(
+    () => saveGeneralSettings("translationSaveStatus"),
+    350,
+  );
+  const autoSaveAudio = debounce(() => saveGeneralSettings("audioSaveStatus"), 350);
+  const autoSaveAnki = debounce(() => saveAnkiSettings("ankiSaveStatus"), 500);
 
-  const btnAudioSave = document.getElementById("saveAudioBtn");
-  if (btnAudioSave) btnAudioSave.onclick = () => saveGeneralSettings("audioSaveStatus");
+  document.getElementById("lookupMode")?.addEventListener("change", autoSaveGeneral);
+  document.getElementById("lookupResultMode")?.addEventListener("change", autoSaveGeneral);
 
-  const btnDictSave = document.getElementById("saveDictionaryBtn");
-  if (btnDictSave) btnDictSave.onclick = () => saveGeneralSettings("dictionarySaveStatus");
+  document.getElementById("enableTranslate")?.addEventListener("change", autoSaveTranslation);
 
-  const btnTranslationSave = document.getElementById("saveTranslationBtn");
-  if (btnTranslationSave) btnTranslationSave.onclick = () => saveGeneralSettings("translationSaveStatus");
+  document.getElementById("forvoEnabled")?.addEventListener("change", autoSaveAudio);
+  document.getElementById("forvoMode")?.addEventListener("change", autoSaveAudio);
+  document.getElementById("forvoMaxDisplay")?.addEventListener("change", autoSaveAudio);
+  document.getElementById("forvoAutoplayCount")?.addEventListener("change", autoSaveAudio);
+  document.getElementById("ttsEnabled")?.addEventListener("change", autoSaveAudio);
+  document.getElementById("voice1")?.addEventListener("change", autoSaveAudio);
+  document.getElementById("voice2")?.addEventListener("change", autoSaveAudio);
+  document.getElementById("voice3")?.addEventListener("change", autoSaveAudio);
+
+  document.getElementById("deckSelect")?.addEventListener("change", autoSaveAnki);
+  document.getElementById("modelSelect")?.addEventListener("change", autoSaveAnki);
+  document.getElementById("tagsInput")?.addEventListener("input", autoSaveAnki);
+  document.getElementById("fieldMappingContainer")?.addEventListener("change", (e) => {
+    if (e.target && e.target.matches("select")) autoSaveAnki();
+  });
+
+  const btnLookupTest = document.getElementById("lookupTestBtn");
+  if (btnLookupTest) btnLookupTest.onclick = () => handleLookupTest();
 });

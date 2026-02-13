@@ -1,29 +1,85 @@
 // background.js
-import { getDefinition } from "./database.js";
 import { loadAnkiConfig, ankiInvoke } from "./ankiSettings.js";
 import { buildFieldsFromMapping } from "./ankiManager.js";
 import { translateText } from "./TranslateModule.js";
 import { getConfig, saveConfig } from "./configManager.js";
 import { TTSModule } from "./ttsModule.js";
+import { lookupTermWithFreq } from "./storage.js";
 
 
 console.log("Background Service Worker đang chạy...");
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === "search_word") {
-    // Tra cứu từ trong IndexedDB của Extension
-    getDefinition(request.word).then((result) => {
-      // Gửi lời hồi đáp về cho content script (website)
-      sendResponse(result);
-      console.log(
-        "Đã gửi phản hồi cho từ background.js:",
-        request.word,
-        "Kết quả:",
-        result,
-      );
-    });
+    getConfig()
+      .then((cfg) => cfg || {})
+      .then((cfg) => {
+        const mode = cfg.lookupResultMode === "first_match" ? "first_match" : "stacked";
+        return lookupTermWithFreq(request.word, { mode, maxDictionaries: 10 });
+      })
+      .then((res) => {
+        if (res?.results) {
+          if (res.results.length === 0) {
+            sendResponse(null);
+            return;
+          }
 
-    // Trả về true để báo cho Chrome biết ta sẽ phản hồi sau (asynchronous)
+          const firstEntry = res.results[0].entries[0];
+          const combinedHtml = res.results
+            .map((block) => {
+              const r = block.resource;
+              const e = block.entries[0];
+              const atoms = (e.meaningAtoms || [])
+                .map(
+                  (a, idx) =>
+                    `<div class="ocean-atom"><b>${a.head || `#${idx + 1}`}</b> ${a.glossHtml || ""}</div>`,
+                )
+                .join("");
+              return `
+                <div class="ocean-dict-block">
+                  <div class="ocean-dict-title">${r.title || r.id}</div>
+                  <div class="ocean-dict-body">${atoms}</div>
+                </div>
+              `;
+            })
+            .join("");
+
+          sendResponse({
+            term: firstEntry.displayTerm || firstEntry.termKey,
+            pronunciation: firstEntry.pronunciation || "",
+            definition: combinedHtml,
+            freqs: res.freqs || [],
+            sources: res.results.map((b) => ({
+              resourceId: b.resource.id,
+              title: b.resource.title,
+            })),
+          });
+          return;
+        }
+
+        const entry = res?.entry;
+        const resource = res?.resource;
+        const freqs = res?.freqs || [];
+        if (!entry) {
+          sendResponse(null);
+          return;
+        }
+        const definitionHtml = (entry.meaningAtoms || [])
+          .map(
+            (a, idx) =>
+              `<div class="ocean-atom"><b>${a.head || `#${idx + 1}`}</b> ${a.glossHtml || ""}</div>`,
+          )
+          .join("");
+        sendResponse({
+          term: entry.displayTerm || entry.termKey,
+          pronunciation: entry.pronunciation || "",
+          definition: definitionHtml,
+          resourceTitle: resource?.title || "",
+          meaningAtoms: entry.meaningAtoms,
+          freqs,
+        });
+      })
+      .catch(() => sendResponse(null));
     return true;
   }
 
