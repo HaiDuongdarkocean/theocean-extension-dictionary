@@ -1,15 +1,40 @@
 /* --- FILE: audioManager.js (Hoặc đầu file popupDictionary.js) --- */
 
-// 1. Cấu hình mặc định (Sau này sẽ lấy từ Storage)
+// Keep a mutable config object so popupDictionary.js can read updated values.
 const AudioConfig = {
-    autoPlay: true,           // Tự động phát khi hiện popup
-    preferredAccent: 'US',    // 'US' (Mỹ) hoặc 'UK' (Anh)
-    maxDisplay: 3,            // Chỉ hiện tối đa 3 loa
-    shortcuts: {
-        playPrimary: 'Space', // Phím Space (kết hợp Ctrl)
-        playAll: 'KeyA'       // Phím A (kết hợp Ctrl)
-    }
+  forvoEnabled: true,
+  forvoMode: "auto", // "auto" | "manual"
+  autoPlayCount: 1,
+  preferredAccent: "US",
+  maxDisplay: 3,
+  shortcuts: {
+    playPrimary: "Space",
+    playAll: "KeyA",
+  },
 };
+
+function loadAudioConfig() {
+  chrome.storage.sync.get(["userConfig"], (result) => {
+    const cfg = result.userConfig || {};
+    const forvo = cfg.forvo || {};
+
+    AudioConfig.forvoEnabled = forvo.enabled !== false;
+    AudioConfig.forvoMode = forvo.mode || "auto";
+    AudioConfig.maxDisplay = Math.min(3, Math.max(1, Number(forvo.maxDisplay) || 3));
+    const rawAuto = Number(forvo.autoplayCount);
+    const auto = Number.isFinite(rawAuto) ? rawAuto : 1;
+    AudioConfig.autoPlayCount = Math.max(0, Math.min(AudioConfig.maxDisplay, auto));
+  });
+}
+
+loadAudioConfig();
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === "sync" && changes.userConfig) {
+    loadAudioConfig();
+  }
+});
+
+window.AudioConfig = AudioConfig;
 
 // 2. Hàm lọc và sắp xếp Audio (Quan trọng nhất)
 function processAudioList(rawList) {

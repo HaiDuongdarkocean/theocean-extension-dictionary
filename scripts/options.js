@@ -26,19 +26,17 @@ const EXTENSION_FIELDS = [
 
 // --- 2. QUẢN LÝ TABS (SIDEBAR) ---
 function initTabs() {
-  const buttons = document.querySelectorAll(".sidebar button");
+  const buttons = document.querySelectorAll(".nav__btn");
   const panels = document.querySelectorAll(".panel");
 
   buttons.forEach((btn) => {
     btn.addEventListener("click", () => {
-      // Xóa trạng thái active cũ
-      buttons.forEach((b) => b.classList.remove("active"));
-      panels.forEach((p) => p.classList.remove("active"));
+      buttons.forEach((b) => b.classList.remove("is-active"));
+      panels.forEach((p) => p.classList.remove("is-active"));
 
-      // Kích hoạt tab mới
-      btn.classList.add("active");
+      btn.classList.add("is-active");
       const panelId = btn.getAttribute("data-panel");
-      document.getElementById(panelId).classList.add("active");
+      document.getElementById(panelId).classList.add("is-active");
     });
   });
 }
@@ -112,9 +110,12 @@ async function setupAudioPanel() {
   const config = await getConfig();
   const voices = await TTSModule.getAvailableVoices();
 
-  // Load trạng thái Checkbox
   document.getElementById("ttsEnabled").checked = config.tts?.enabled || false;
-  document.getElementById("enableTranslate").checked = config.translateEnabled || false;
+
+  document.getElementById("forvoEnabled").checked = config.forvo?.enabled ?? true;
+  document.getElementById("forvoMode").value = config.forvo?.mode || "auto";
+  document.getElementById("forvoMaxDisplay").value = String(config.forvo?.maxDisplay || 3);
+  document.getElementById("forvoAutoplayCount").value = String(config.forvo?.autoplayCount ?? 1);
 
   // Hàm đổ giọng đọc vào 3 Slot
   const populateVoice = (selectId, currentVoice) => {
@@ -128,16 +129,46 @@ async function setupAudioPanel() {
   populateVoice("voice3", config.tts?.voices?.[2]);
 }
 
-// --- 5. LOGIC LƯU TRỮ TỔNG HỢP ---
-async function handleSaveSettings(statusId) {
+async function setupDictionaryPanel() {
+  const config = await getConfig();
+  const lookupModeSelect = document.getElementById("lookupMode");
+  if (lookupModeSelect) {
+    lookupModeSelect.value = config.lookupMode || "hover";
+  }
+}
+
+async function setupTranslationPanel() {
+  const config = await getConfig();
+  const checkbox = document.getElementById("enableTranslate");
+  if (checkbox) checkbox.checked = config.translateEnabled || false;
+}
+
+function clampInt(value, min, max, fallback) {
+  const n = Number.parseInt(String(value), 10);
+  if (Number.isNaN(n)) return fallback;
+  return Math.min(max, Math.max(min, n));
+}
+
+async function saveGeneralSettings(statusId) {
   try {
-    // A. Thu thập dữ liệu TTS từ giao diện
     const currentGeneralConfig = await getConfig();
+
+    const maxDisplay = clampInt(document.getElementById("forvoMaxDisplay")?.value, 1, 3, 3);
+    const autoplayCountRaw = clampInt(document.getElementById("forvoAutoplayCount")?.value, 0, 3, 1);
+    const autoplayCount = Math.min(autoplayCountRaw, maxDisplay);
+
     const newGeneralConfig = {
       ...currentGeneralConfig,
-      translateEnabled: document.getElementById("enableTranslate").checked,
+      lookupMode: document.getElementById("lookupMode")?.value || "hover",
+      translateEnabled: document.getElementById("enableTranslate")?.checked || false,
+      forvo: {
+        enabled: document.getElementById("forvoEnabled")?.checked ?? true,
+        mode: document.getElementById("forvoMode")?.value || "auto",
+        maxDisplay,
+        autoplayCount,
+      },
       tts: {
-        enabled: document.getElementById("ttsEnabled").checked,
+        enabled: document.getElementById("ttsEnabled")?.checked || false,
         voices: [
           document.getElementById("voice1").value,
           document.getElementById("voice2").value,
@@ -147,23 +178,6 @@ async function handleSaveSettings(statusId) {
     };
     await saveConfig(newGeneralConfig);
 
-    // B. Thu thập dữ liệu Anki từ giao diện
-    const fieldMapping = {};
-    document.querySelectorAll("#fieldMappingContainer select").forEach(select => {
-      if (select.value) {
-        fieldMapping[select.dataset.extField] = select.value;
-      }
-    });
-
-    const ankiConfig = {
-      deckName: document.getElementById("deckSelect").value,
-      modelName: document.getElementById("modelSelect").value,
-      tags: document.getElementById("tagsInput").value.split(",").map(t => t.trim()).filter(Boolean),
-      fieldMapping: fieldMapping
-    };
-    await saveAnkiConfig(ankiConfig);
-
-    // Hiển thị thông báo thành công
     const statusEl = document.getElementById(statusId);
     statusEl.innerText = "✅ Đã lưu tất cả cài đặt!";
     statusEl.style.color = "green";
@@ -174,11 +188,41 @@ async function handleSaveSettings(statusId) {
   }
 }
 
+async function saveAnkiSettings(statusId) {
+  try {
+    const fieldMapping = {};
+    document.querySelectorAll("#fieldMappingContainer select").forEach((select) => {
+      if (select.value) {
+        fieldMapping[select.dataset.extField] = select.value;
+      }
+    });
+
+    const ankiConfig = {
+      deckName: document.getElementById("deckSelect")?.value || "",
+      modelName: document.getElementById("modelSelect")?.value || "",
+      tags: (document.getElementById("tagsInput")?.value || "")
+        .split(",")
+        .map((t) => t.trim())
+        .filter(Boolean),
+      fieldMapping,
+    };
+
+    await saveAnkiConfig(ankiConfig);
+
+    const statusEl = document.getElementById(statusId);
+    statusEl.innerText = "✅ Đã lưu!";
+    statusEl.style.color = "green";
+    setTimeout(() => (statusEl.innerText = ""), 2000);
+  } catch (err) {
+    alert("Có lỗi khi lưu Anki: " + err.message);
+  }
+}
+
 // --- 6. QUẢN LÝ NHẬP TỪ ĐIỂN (DICTIONARY) ---
 function initDictionaryPanel() {
   const importBtn = document.getElementById("importBtn");
   const dictFile = document.getElementById("dictFile");
-  const status = document.getElementById("status");
+  const status = document.getElementById("dictStatus");
 
   importBtn.onclick = async () => {
     if (!dictFile.files.length) return alert("Chọn file JSON đã con!");
@@ -211,11 +255,19 @@ document.addEventListener("DOMContentLoaded", async () => {
   // Sư phụ bọc trong try-catch để nếu Anki lỗi thì TTS vẫn load được
   await setupAnkiPanel().catch(e => console.log("Anki Panel load fail"));
   await setupAudioPanel().catch(e => console.log("Audio Panel load fail"));
+  await setupDictionaryPanel().catch(e => console.log("Dictionary Panel load fail"));
+  await setupTranslationPanel().catch(e => console.log("Translation Panel load fail"));
 
   // Gán sự kiện cho các nút Lưu
   const btnAnkiSave = document.getElementById("saveAnkiSettings");
-  if (btnAnkiSave) btnAnkiSave.onclick = () => handleSaveSettings("ankiStatus");
+  if (btnAnkiSave) btnAnkiSave.onclick = () => saveAnkiSettings("ankiStatus");
 
-  const btnAudioSave = document.getElementById("saveBtn"); // Nút lưu ở phần Audio
-  if (btnAudioSave) btnAudioSave.onclick = () => handleSaveSettings("status");
+  const btnAudioSave = document.getElementById("saveAudioBtn");
+  if (btnAudioSave) btnAudioSave.onclick = () => saveGeneralSettings("audioSaveStatus");
+
+  const btnDictSave = document.getElementById("saveDictionaryBtn");
+  if (btnDictSave) btnDictSave.onclick = () => saveGeneralSettings("dictionarySaveStatus");
+
+  const btnTranslationSave = document.getElementById("saveTranslationBtn");
+  if (btnTranslationSave) btnTranslationSave.onclick = () => saveGeneralSettings("translationSaveStatus");
 });

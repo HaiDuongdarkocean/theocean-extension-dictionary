@@ -7,11 +7,39 @@ const dictionary = new Map();
 let globalCloseTimer = null;
 let lookupTimer = null;
 let popupStack = [];
+let lookupMode = "hover";
 
 // 2. Tạo phần tử Popup (như bài trước)
 const popup = document.createElement("div");
 popup.id = "yomitan-popup";
 document.body.appendChild(popup);
+
+function loadLookupMode() {
+  chrome.storage.sync.get(["userConfig"], (result) => {
+    lookupMode = result.userConfig?.lookupMode || "hover";
+  });
+}
+
+function isLookupTriggered(event) {
+  switch (lookupMode) {
+    case "ctrl":
+      return event.ctrlKey;
+    case "alt":
+      return event.altKey;
+    case "shift":
+      return event.shiftKey;
+    case "hover":
+    default:
+      return true;
+  }
+}
+
+loadLookupMode();
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === "sync" && changes.userConfig) {
+    lookupMode = changes.userConfig.newValue?.lookupMode || "hover";
+  }
+});
 
 // Sửa lại hàm này: Thay vì tự mở DB, ta gửi tin nhắn cho Background
 async function getDefinitionSendMessage(word) {
@@ -313,43 +341,50 @@ function showPopup(x, y, data, level) {
   // 4. ĐI LẤY DỮ LIỆU THẬT (Bất đồng bộ)
   const audioContainer = newPopup.querySelector(".yomi-audio-group");
 
-  fetchAudioFromForvo(data.term).then((realData) => {
-    const safeData = realData || [];
-    // console.log("Dữ liệu âm thanh thô:", realData);
-    const processed = processAudioList(realData);
-    // console.log("Dữ liệu sau khi lọc (processed):", processed);
+  function loadForvoAudio() {
+    audioContainer.innerHTML = `<span style="font-size:10px; color:#999;">Loading...</span>`;
 
-    if (processed.fullList && processed.fullList.length > 0) {
-      // Lưu toàn bộ audio
-      newPopup._audioFullList = processed.fullList;
+    fetchAudioFromForvo(data.term).then((realData) => {
+      const processed = processAudioList(realData);
 
-      // Luu audio anki
-      data.audio = newPopup._audioFullList?.[0]?.url;
-      console.log("infoOfSentenceAndWord with audio:", data);
+      if (processed.fullList && processed.fullList.length > 0) {
+        newPopup._audioFullList = processed.fullList;
 
-      // Ban đầu chỉ hiển thị 3
-      newPopup._audioVisibleCount = AudioConfig.maxDisplay;
+        data.audio = newPopup._audioFullList?.[0]?.url;
 
-      // Render bằng hệ thống lazy mới
-      renderAudioGroup(newPopup);
+        newPopup._audioVisibleCount = AudioConfig.maxDisplay;
+        renderAudioGroup(newPopup);
 
-      // AutoPlay chỉ tải audio đầu tiên
-      if (AudioConfig.autoPlay) {
-        setTimeout(() => {
-          const firstUrl = newPopup._audioFullList?.[0]?.url;
-          if (!firstUrl) return;
-
-          if (AudioConfig.autoPlay) {
-            setTimeout(() => {
-              playMultipleAudios(newPopup, 1);
-            }, 300);
-          }
-        }, 300);
+        const autoCount = Math.min(
+          AudioConfig.autoPlayCount || 0,
+          newPopup._audioVisibleCount || 0,
+          newPopup._audioFullList.length || 0,
+        );
+        if (autoCount > 0) {
+          setTimeout(() => {
+            playMultipleAudios(newPopup, autoCount);
+          }, 300);
+        }
+      } else {
+        audioContainer.innerHTML = `<span style="font-size:10px; color:#ccc;">No audio</span>`;
       }
-    } else {
-      audioContainer.innerHTML = `<span style="font-size:10px; color:#ccc;">No audio</span>`;
+    });
+  }
+
+  if (!AudioConfig.forvoEnabled) {
+    audioContainer.innerHTML = `<span style="font-size:10px; color:#ccc;">Forvo disabled</span>`;
+  } else if (AudioConfig.forvoMode === "manual") {
+    audioContainer.innerHTML = `<button class="yomi-forvo-load" style="border:1px solid #ddd;background:transparent;border-radius:8px;padding:4px 8px;font-size:11px;cursor:pointer;">Load audio</button>`;
+    const btn = audioContainer.querySelector(".yomi-forvo-load");
+    if (btn) {
+      btn.onclick = (e) => {
+        e.stopPropagation();
+        loadForvoAudio();
+      };
     }
-  });
+  } else {
+    loadForvoAudio();
+  }
 
   // 5. Gắn phím tắt (Nhớ remove khi đóng)
   const keyHandler = (e) => {
@@ -504,6 +539,7 @@ document.addEventListener("mousemove", (event) => {
   // 2. QUẢN LÝ TRA TỪ (Lookup)
   clearTimeout(lookupTimer);
   lookupTimer = setTimeout(async () => {
+    if (!isLookupTriggered(event)) return;
     let range = null;
     if (typeof document.caretRangeFromPoint === "function") {
       range = document.caretRangeFromPoint(event.clientX, event.clientY);
@@ -599,12 +635,12 @@ document.addEventListener("mousemove", (event) => {
     // --- ĐOẠN THÊM MỚI: DỊCH CÂU ---
     // 1. Load config để xem user có bật "enableTranslate" không
     const config = await new Promise((resolve) => {
-      chrome.storage.sync.get(["ankiConfig"], (res) =>
-        resolve(res.ankiConfig || {}),
+      chrome.storage.sync.get(["userConfig"], (res) =>
+        resolve(res.userConfig || {}),
       );
     });
 
-    if (config.enableTranslate && sentence) {
+    if (config.translateEnabled && sentence) {
       // Gửi tin nhắn nhờ Background dịch hộ
       const translationResult = await new Promise((resolve) => {
         chrome.runtime.sendMessage(

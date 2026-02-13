@@ -3,204 +3,241 @@
   <head>
     <title>Yomitan Simulate Pro - Settings</title>
     <meta charset="utf-8" />
-    <style>
-      body {
-        margin: 0;
-        font-family: Arial, sans-serif;
-        display: flex;
-        height: 100vh;
-      }
-
-      .sidebar {
-        width: 220px;
-        background: #1e1e1e;
-        color: white;
-        padding: 20px 10px;
-      }
-
-      .sidebar h2 {
-        font-size: 16px;
-        margin-bottom: 20px;
-      }
-
-      .sidebar button {
-        display: block;
-        width: 100%;
-        margin-bottom: 10px;
-        padding: 8px;
-        border: none;
-        background: #333;
-        color: white;
-        cursor: pointer;
-        text-align: left;
-      }
-
-      .sidebar button.active {
-        background: #0078ff;
-      }
-
-      .content {
-        flex: 1;
-        padding: 30px;
-        overflow-y: auto;
-      }
-
-      .panel {
-        display: none;
-      }
-
-      .panel.active {
-        display: block;
-      }
-
-      body {
-        font-family: sans-serif;
-        padding: 20px;
-        color: #333;
-      }
-      .section {
-        margin-bottom: 25px;
-        border: 1px solid #eee;
-        padding: 15px;
-        border-radius: 8px;
-      }
-      h2 {
-        margin-top: 0;
-        color: #0078ff;
-      }
-      .row {
-        margin-bottom: 10px;
-        display: flex;
-        align-items: center;
-        gap: 10px;
-      }
-      select {
-        padding: 5px;
-        min-width: 200px;
-      }
-      .hint {
-        font-size: 12px;
-        color: #777;
-        margin-top: -5px;
-        margin-bottom: 10px;
-      }
-      #saveBtn {
-        background: #0078ff;
-        color: white;
-        border: none;
-        padding: 10px 20px;
-        border-radius: 4px;
-        cursor: pointer;
-      }
-    </style>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" href="style/options.css" />
   </head>
   <body>
-    <div class="sidebar">
-      <h2>Settings</h2>
-      <button data-panel="dictionaryPanel" class="active">Dictionary</button>
-      <button data-panel="ankiPanel">Anki</button>
-      <button data-panel="audioPanel">Audio</button>
-    </div>
+    <div class="app">
+      <aside class="nav">
+        <div class="brand">
+          <p class="brand__title">Yomitan Simulate Pro</p>
+          <p class="brand__sub">Settings</p>
+        </div>
 
-    <div class="content">
-      <!-- Dictionary Panel -->
-      <div id="dictionaryPanel" class="panel active">
-        <h1>Dictionary Settings</h1>
-        <p>Chọn file JSON để nạp vào bộ nhớ:</p>
-        <input type="file" id="dictFile" accept=".json" />
-        <button id="importBtn">Bắt đầu nạp</button>
-        <div id="status"></div>
-      </div>
+        <div class="nav__list">
+          <button class="nav__btn is-active" data-panel="dictionaryPanel" type="button">Dictionary</button>
+          <button class="nav__btn" data-panel="ankiPanel" type="button">Anki</button>
+          <button class="nav__btn" data-panel="translationPanel" type="button">Translation</button>
+          <button class="nav__btn" data-panel="audioPanel" type="button">Audio</button>
+        </div>
+      </aside>
 
-      <!-- Anki Panel -->
-      <div id="ankiPanel" class="panel">
-        <h1>Anki Settings</h1>
-
-        <label>Deck:</label>
-        <select id="deckSelect"></select>
-        <br /><br />
-
-        <label>Model:</label>
-        <select id="modelSelect"></select>
-        <br /><br />
-
-        <label>Tags (comma separated):</label>
-        <input type="text" id="tagsInput" />
-        <br /><br />
-
-        <div id="fieldMappingContainer"></div>
-
-        <button id="saveAnkiSettings">Save</button>
-        <div id="ankiStatus"></div>
-      </div>
-
-      <!-- Audio Panel -->
-      <div id="audioPanel" class="panel">
-        <h1>Audio & Translation Settings</h1>
-
-        <div
-          style="
-            background: #f9f9f9;
-            padding: 15px;
-            border-radius: 8px;
-            border: 1px solid #ddd;
-          "
-        >
-          <h3>Dịch thuật (Google Translate)</h3>
-          <label
-            style="
-              display: flex;
-              align-items: center;
-              gap: 10px;
-              cursor: pointer;
-            "
-          >
-            <input type="checkbox" id="enableTranslate" />
-            <span>Tự động dịch câu ví dụ sang tiếng Việt</span>
-          </label>
-          <p style="font-size: 12px; color: #666">
-            (Sử dụng Google Translate Web Endpoint - Miễn phí)
-          </p>
-
-          <hr style="margin: 15px 0; border: 0; border-top: 1px solid #eee" />
-
-          <!-- TTS -->
-          <h2>Cài đặt Extension</h2>
-
-          <div class="section">
-            <h3>🔊 Text-to-Speech (TTS)</h3>
-            <div class="row">
-              <input type="checkbox" id="ttsEnabled" />
-              <label for="ttsEnabled">Kích hoạt giọng đọc câu ví dụ</label>
-            </div>
-
-            <div class="row">
-              <label>Lọc quốc gia:</label>
-              <select id="langFilter">
-                <option value="all">Tất cả</option>
-                <option value="en-US">English (US)</option>
-                <option value="en-GB">English (UK)</option>
-              </select>
-            </div>
-
-            <div class="row">
-              <label>Giọng đọc 1 (Mặc định):</label>
-              <select id="voice1"></select>
-            </div>
-            <div class="row">
-              <label>Giọng đọc 2:</label>
-              <select id="voice2"></select>
-            </div>
-            <div class="row">
-              <label>Giọng đọc 3:</label>
-              <select id="voice3"></select>
+      <main class="main">
+        <section id="dictionaryPanel" class="panel is-active">
+          <div class="panel__header">
+            <div>
+              <h1 class="panel__title">Dictionary</h1>
+              <p class="panel__desc">Import data and control how lookups are triggered.</p>
             </div>
           </div>
 
-          <button id="saveBtn">Lưu cài đặt</button>
-          <span id="status"></span>
-        </div>
-      </div>
+          <div class="grid">
+            <div class="card">
+              <div class="card__header">
+                <h2 class="card__title">Import Dictionary</h2>
+              </div>
+              <div class="card__body">
+                <div class="row">
+                  <div class="row__label">JSON file</div>
+                  <div class="row__control">
+                    <input type="file" id="dictFile" accept=".json" />
+                    <button class="btn btn--primary" id="importBtn" type="button">Import</button>
+                  </div>
+                </div>
+                <p class="status" id="dictStatus"></p>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card__header">
+                <h2 class="card__title">Lookup Trigger</h2>
+              </div>
+              <div class="card__body">
+                <div class="row">
+                  <div class="row__label">Trigger mode</div>
+                  <div class="row__control">
+                    <select id="lookupMode">
+                      <option value="hover">Hover</option>
+                      <option value="ctrl">Ctrl + Hover</option>
+                      <option value="alt">Alt + Hover</option>
+                      <option value="shift">Shift + Hover</option>
+                    </select>
+                  </div>
+                </div>
+                <p class="hint">When not set to Hover, popup only appears while the key is held.</p>
+
+                <div class="actions">
+                  <button class="btn btn--primary" id="saveDictionaryBtn" type="button">Save</button>
+                  <span class="status" id="dictionarySaveStatus"></span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="ankiPanel" class="panel">
+          <div class="panel__header">
+            <div>
+              <h1 class="panel__title">Anki</h1>
+              <p class="panel__desc">Connect AnkiConnect and map fields.</p>
+            </div>
+          </div>
+
+          <div class="grid">
+            <div class="card">
+              <div class="card__header">
+                <h2 class="card__title">Connection</h2>
+              </div>
+              <div class="card__body">
+                <div class="row">
+                  <div class="row__label">Deck</div>
+                  <div class="row__control"><select id="deckSelect"></select></div>
+                </div>
+                <div class="row">
+                  <div class="row__label">Model</div>
+                  <div class="row__control"><select id="modelSelect"></select></div>
+                </div>
+                <div class="row">
+                  <div class="row__label">Tags</div>
+                  <div class="row__control"><input type="text" id="tagsInput" placeholder="tag1, tag2" /></div>
+                </div>
+
+                <div id="fieldMappingContainer"></div>
+
+                <div class="actions">
+                  <button class="btn btn--primary" id="saveAnkiSettings" type="button">Save</button>
+                  <span class="status" id="ankiStatus"></span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="translationPanel" class="panel">
+          <div class="panel__header">
+            <div>
+              <h1 class="panel__title">Translation</h1>
+              <p class="panel__desc">Translate example sentences.</p>
+            </div>
+          </div>
+
+          <div class="grid">
+            <div class="card">
+              <div class="card__header">
+                <h2 class="card__title">Google Translate</h2>
+              </div>
+              <div class="card__body">
+                <div class="row">
+                  <div class="row__label">Auto translate</div>
+                  <div class="row__control">
+                    <input type="checkbox" id="enableTranslate" />
+                    <span>Translate sentence to Vietnamese</span>
+                  </div>
+                </div>
+                <p class="hint">Uses Google Translate web endpoint.</p>
+
+                <div class="actions">
+                  <button class="btn btn--primary" id="saveTranslationBtn" type="button">Save</button>
+                  <span class="status" id="translationSaveStatus"></span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="audioPanel" class="panel">
+          <div class="panel__header">
+            <div>
+              <h1 class="panel__title">Audio</h1>
+              <p class="panel__desc">Forvo pronunciation and local TTS.</p>
+            </div>
+          </div>
+
+          <div class="grid">
+            <div class="card">
+              <div class="card__header">
+                <h2 class="card__title">Forvo</h2>
+              </div>
+              <div class="card__body">
+                <div class="row">
+                  <div class="row__label">Enable Forvo</div>
+                  <div class="row__control">
+                    <input type="checkbox" id="forvoEnabled" />
+                    <span>Fetch pronunciations when popup shows</span>
+                  </div>
+                </div>
+
+                <div class="row">
+                  <div class="row__label">Mode</div>
+                  <div class="row__control">
+                    <select id="forvoMode">
+                      <option value="auto">Auto load</option>
+                      <option value="manual">Manual only</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div class="row">
+                  <div class="row__label">Show buttons</div>
+                  <div class="row__control">
+                    <select id="forvoMaxDisplay">
+                      <option value="1">1</option>
+                      <option value="2">2</option>
+                      <option value="3">3</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div class="row">
+                  <div class="row__label">Autoplay</div>
+                  <div class="row__control">
+                    <select id="forvoAutoplayCount">
+                      <option value="0">0</option>
+                      <option value="1">1</option>
+                      <option value="2">2</option>
+                      <option value="3">3</option>
+                    </select>
+                  </div>
+                </div>
+                <p class="hint">Autoplay is capped by the number of buttons shown.</p>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card__header">
+                <h2 class="card__title">Text-to-Speech (TTS)</h2>
+              </div>
+              <div class="card__body">
+                <div class="row">
+                  <div class="row__label">Enable TTS</div>
+                  <div class="row__control">
+                    <input type="checkbox" id="ttsEnabled" />
+                    <span>Read example sentence</span>
+                  </div>
+                </div>
+
+                <div class="row">
+                  <div class="row__label">Voice 1</div>
+                  <div class="row__control"><select id="voice1"></select></div>
+                </div>
+                <div class="row">
+                  <div class="row__label">Voice 2</div>
+                  <div class="row__control"><select id="voice2"></select></div>
+                </div>
+                <div class="row">
+                  <div class="row__label">Voice 3</div>
+                  <div class="row__control"><select id="voice3"></select></div>
+                </div>
+
+                <div class="actions">
+                  <button class="btn btn--primary" id="saveAudioBtn" type="button">Save</button>
+                  <span class="status" id="audioSaveStatus"></span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
     </div>
 
     <script type="module" src="scripts/options.js"></script>

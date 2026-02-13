@@ -11,6 +11,14 @@ const DEFAULT_CONFIG = {
         voices: ["", "", ""], // Slot 1, 2, 3
         preferredLang: "en-US"
     },
+    translateEnabled: false,
+    lookupMode: "hover",
+    forvo: {
+        enabled: true,
+        mode: "auto", // "auto" | "manual"
+        maxDisplay: 3,
+        autoplayCount: 1
+    },
     image: {
         enabled: true,
         autoLoadCount: 3
