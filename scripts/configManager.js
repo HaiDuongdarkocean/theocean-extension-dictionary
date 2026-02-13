@@ -29,6 +29,9 @@ const DEFAULT_CONFIG = {
     image: {
         enabled: true,
         autoLoadCount: 3
+    },
+    popup: {
+        defaultFeature: "forvo" // "forvo" | "images" | "tts" | "sentence" | "none"
     }
 };
 
@@ -56,6 +59,10 @@ export async function getConfig() {
                 image: {
                     ...DEFAULT_CONFIG.image,
                     ...(userCfg.image || {}),
+                },
+                popup: {
+                    ...DEFAULT_CONFIG.popup,
+                    ...(userCfg.popup || {}),
                 },
             });
         });

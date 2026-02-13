@@ -332,6 +332,10 @@
   cursor: pointer;
 }
 
+.yomi-load-more-img {
+  display: none;
+}
+
 .yomi-audio-group {
   display: flex;
   gap: 6px;
@@ -385,4 +389,251 @@
 
 .yomi-definition-block.is-selected {
   box-shadow: inset 0 0 0 1px #42b72a;
+}
+
+/* ===== Feature-shell layout ===== */
+.yomi-header-main {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.yomi-header-title {
+  min-width: 0;
+}
+
+.yomi-feature-shell {
+  border-top: 1px solid var(--yomi-border);
+  border-bottom: 1px solid var(--yomi-border);
+  background: var(--yomi-surface);
+}
+
+.yomi-feature-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--yomi-border);
+}
+
+.yomi-feature-btn {
+  border: 1px solid var(--yomi-border);
+  background: var(--yomi-bg);
+  color: var(--yomi-text-sub);
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 5px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.yomi-feature-btn.is-active {
+  border-color: var(--yomi-primary);
+  color: var(--yomi-primary);
+  background: var(--yomi-primary-soft);
+}
+
+.yomi-feature-body {
+  min-height: 88px;
+  padding: 8px 12px 10px;
+}
+
+.yomi-feature-body.is-empty {
+  display: none;
+}
+
+.yomi-feature-pane {
+  display: none;
+}
+
+.yomi-feature-pane.is-active {
+  display: block;
+}
+
+.yomi-feature-placeholder {
+  color: var(--yomi-text-sub);
+  font-size: 12px;
+  padding: 8px 6px;
+}
+
+/* ===== Forvo list (vertical) ===== */
+.yomi-audio-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 172px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 2px;
+}
+
+.yomi-audio-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--yomi-border);
+  border-radius: 10px;
+  padding: 6px;
+  background: var(--yomi-bg);
+}
+
+.yomi-audio-play {
+  border: 1px solid var(--yomi-primary);
+  background: var(--yomi-primary-soft);
+  color: var(--yomi-primary);
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 5px 8px;
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+
+.yomi-audio-play.is-playing {
+  filter: brightness(0.9);
+}
+
+.yomi-audio-body {
+  border: 0;
+  background: transparent;
+  color: var(--yomi-text-main);
+  text-align: left;
+  min-width: 0;
+  flex: 1 1 auto;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.yomi-audio-name {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--yomi-text-main);
+}
+
+.yomi-audio-region {
+  font-size: 11px;
+  color: var(--yomi-text-sub);
+}
+
+.yomi-audio-item.is-focused {
+  border-color: var(--yomi-primary);
+}
+
+.yomi-audio-item.is-selected {
+  box-shadow: inset 0 0 0 1px #42b72a;
+}
+
+/* ===== TTS list (vertical, name ellipsis) ===== */
+.yomi-tts-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.yomi-tts-head > span {
+  font-size: 11px;
+  color: var(--yomi-text-sub);
+  font-weight: 700;
+}
+
+.yomi-tts-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 172px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 2px;
+}
+
+.yomi-tts-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--yomi-border);
+  border-radius: 10px;
+  padding: 6px;
+  background: var(--yomi-bg);
+}
+
+.yomi-tts-play {
+  border: 1px solid var(--yomi-primary);
+  background: var(--yomi-primary-soft);
+  color: var(--yomi-primary);
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 5px 8px;
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+
+.yomi-tts-body {
+  border: 0;
+  background: transparent;
+  color: var(--yomi-text-main);
+  text-align: left;
+  min-width: 0;
+  flex: 1 1 auto;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.yomi-tts-name {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--yomi-text-main);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.yomi-tts-lang {
+  font-size: 11px;
+  color: var(--yomi-text-sub);
+}
+
+.yomi-tts-item.is-focused {
+  border-color: var(--yomi-primary);
+}
+
+.yomi-tts-item.is-selected {
+  box-shadow: inset 0 0 0 1px #42b72a;
+}
+
+/* ===== Sentence section ===== */
+.yomi-sentence-section {
+  padding: 2px 2px 4px;
+}
+
+.yomi-sentence-text {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--yomi-text-main);
+  font-style: italic;
+}
+
+.yomi-sentence-translation {
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--yomi-text-sub);
+}
+
+/* ===== Image section ===== */
+.yomi-image-section .yomi-image-gallery {
+  min-height: 98px;
+}
+
+.yomi-image-section .yomi-image-controls {
+  margin-top: 6px;
 }

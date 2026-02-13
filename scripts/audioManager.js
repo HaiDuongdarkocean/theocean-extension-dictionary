@@ -81,6 +81,39 @@ async function fetchAudioFromForvo(term) {
             resolve([]);
         }, 5000);
 
+        const normalize = (text) => String(text || "").replace(/\s+/g, " ").trim();
+        const readSpeakerMeta = (button, fallbackCountry) => {
+            const row = button.closest("li") || button.closest(".pronunciations") || button.parentElement;
+            const profileAnchor =
+                row?.querySelector(".ofLink a") ||
+                row?.querySelector(".ofLink") ||
+                row?.querySelector('a[href*="/profiles/"]');
+            const speaker = normalize(profileAnchor?.textContent) || "Unknown speaker";
+
+            const fromText = normalize(row?.querySelector(".from")?.textContent || "");
+            const regionText = normalize(fromText.replace(/^from\s+/i, ""));
+            const region = regionText || fallbackCountry || "Unknown region";
+
+            return { speaker, region };
+        };
+
+        const parseContainer = (container, fallbackCountry, results) => {
+            if (!container) return;
+            const playButtons = container.querySelectorAll(".play");
+            playButtons.forEach((btn) => {
+                const onClickAttr = btn.getAttribute("onclick") || "";
+                const match = onClickAttr.match(/Play\(\d+,'([^']+)'/i);
+                if (!match || !match[1]) return;
+                const { speaker, region } = readSpeakerMeta(btn, fallbackCountry);
+                results.push({
+                    url: `https://audio00.forvo.com/mp3/${atob(match[1])}`,
+                    country: fallbackCountry,
+                    region,
+                    speaker,
+                });
+            });
+        };
+
         chrome.runtime.sendMessage({ action: "fetchForvo", term: term }, (response) => {
             if (done) return;
             done = true;
@@ -93,44 +126,10 @@ async function fetchAudioFromForvo(term) {
 
             const parser = new DOMParser();
             const doc = parser.parseFromString(response.data, "text/html");
-
             const results = [];
 
-            // ===== 1️⃣ LẤY UK =====
-            const ukContainer = doc.querySelector("#pronunciations-list-en_uk");
-            if (ukContainer) {
-                const ukButtons = ukContainer.querySelectorAll(".play");
-
-                ukButtons.forEach(btn => {
-                    const onClickAttr = btn.getAttribute("onclick");
-                    const match = onClickAttr?.match(/Play\(\d+,'([^']+)'/i);
-
-                    if (match && match[1]) {
-                        results.push({
-                            url: `https://audio00.forvo.com/mp3/${atob(match[1])}`,
-                            country: "United Kingdom"
-                        });
-                    }
-                });
-            }
-
-            // ===== 2️⃣ LẤY US =====
-            const usContainer = doc.querySelector("#pronunciations-list-en_usa");
-            if (usContainer) {
-                const usButtons = usContainer.querySelectorAll(".play");
-
-                usButtons.forEach(btn => {
-                    const onClickAttr = btn.getAttribute("onclick");
-                    const match = onClickAttr?.match(/Play\(\d+,'([^']+)'/i);
-
-                    if (match && match[1]) {
-                        results.push({
-                            url: `https://audio00.forvo.com/mp3/${atob(match[1])}`,
-                            country: "United States"
-                        });
-                    }
-                });
-            }
+            parseContainer(doc.querySelector("#pronunciations-list-en_uk"), "United Kingdom", results);
+            parseContainer(doc.querySelector("#pronunciations-list-en_usa"), "United States", results);
 
             resolve(results);
         });

@@ -419,6 +419,10 @@ async function setupDictionaryPanel() {
   if (resultModeSelect) {
     resultModeSelect.value = config.lookupResultMode || "stacked";
   }
+  const popupDefaultFeatureSelect = document.getElementById("popupDefaultFeature");
+  if (popupDefaultFeatureSelect) {
+    popupDefaultFeatureSelect.value = config.popup?.defaultFeature || "forvo";
+  }
 }
 
 async function setupSentencePanel() {
@@ -582,6 +586,10 @@ async function saveGeneralSettings(statusId) {
       lookupMode: document.getElementById("lookupMode")?.value || "hover",
       lookupResultMode:
         document.getElementById("lookupResultMode")?.value || "stacked",
+      popup: {
+        ...(currentGeneralConfig.popup || {}),
+        defaultFeature: document.getElementById("popupDefaultFeature")?.value || "forvo",
+      },
       translateEnabled: document.getElementById("enableTranslate")?.checked || false,
       sentence: {
         showSentence: document.getElementById("showSentenceToggle")?.checked ?? true,
@@ -960,6 +968,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   document.getElementById("lookupMode")?.addEventListener("change", autoSaveGeneral);
   document.getElementById("lookupResultMode")?.addEventListener("change", autoSaveGeneral);
+  document.getElementById("popupDefaultFeature")?.addEventListener("change", autoSaveGeneral);
 
   document.getElementById("showSentenceToggle")?.addEventListener("change", autoSaveSentence);
   document.getElementById("showSentenceTranslationToggle")?.addEventListener("change", autoSaveSentence);
