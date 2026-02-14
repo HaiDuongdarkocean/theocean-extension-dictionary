@@ -13,7 +13,7 @@ let shortcutConfig = null;
 let shortcutReady = false;
 const ShortcutUtils = window.ShortcutUtils;
 const POPUP_SIZE_KEY = "oceanPopupSize";
-const POPUP_FEATURES = ["forvo", "images", "tts", "sentence"];
+const POPUP_FEATURES = ["forvo", "images", "tts", "sentence", "other"];
 
 function loadPopupSize() {
   return new Promise((resolve) => {
@@ -110,11 +110,13 @@ function resolvePopupFeatures(cardData, popupCfg) {
   const forvoVisible = popupCfg?.forvo?.enabled !== false;
   const imageVisible = popupCfg?.image?.enabled !== false && cardData?._imagesEnabled !== false;
   const ttsVisible = popupCfg?.tts?.enabled !== false && !!(cardData?.sentence || cardData?.term);
+  const otherVisible = Array.isArray(popupCfg?.otherDictionaries) && popupCfg.otherDictionaries.length > 0;
 
   if (forvoVisible) available.push("forvo");
   if (imageVisible) available.push("images");
   if (ttsVisible) available.push("tts");
   if (sentenceVisible) available.push("sentence");
+  if (otherVisible) available.push("other");
 
   const preferred = popupCfg?.popup?.defaultFeature || "forvo";
   let initial = null;
@@ -131,6 +133,7 @@ function resolvePopupFeatures(cardData, popupCfg) {
     forvoVisible,
     imageVisible,
     ttsVisible,
+    otherVisible,
   };
 }
 
@@ -142,6 +145,7 @@ function renderFeatureToolbar(popup) {
     images: "Images",
     tts: "TTS",
     sentence: "Sentence",
+    other: "Other",
   };
 
   toolbar.innerHTML = popup._availableFeatures
@@ -174,7 +178,18 @@ function setActiveFeature(popup, feature) {
   });
 
   const body = popup.querySelector(".yomi-feature-body");
-  if (body) body.classList.toggle("is-empty", !feature);
+  if (body) {
+    body.classList.toggle("is-empty", !feature);
+    // When switching features (or shortcut-triggered navigation), always show the feature content from the top.
+    // This keeps the feature UI consistent even if user previously scrolled inside the feature-body.
+    body.scrollTop = 0;
+  }
+
+  // Scroll the feature-shell into view to ensure toolbar and content are visible
+  const featureShell = popup.querySelector(".yomi-feature-shell");
+  if (featureShell && feature) {
+    featureShell.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
 }
 
 function activateFeatureForAction(popup, action) {
@@ -183,10 +198,16 @@ function activateFeatureForAction(popup, action) {
     audioNext: "forvo",
     audioPrev: "forvo",
     audioSelect: "forvo",
+    audioPlay: "forvo",
     imageNext: "images",
     imagePrev: "images",
     imageSelect: "images",
-    ttsSentence: "tts",
+    ttsPrev: "tts",
+    ttsSelect: "tts",
+    ttsNext: "tts",
+    ttsPlay: "tts",
+    showOther: "other",
+    showSentence: "sentence",
   };
   const feature = actionMap[action];
   if (feature && popup._availableFeatures.includes(feature)) {
@@ -328,12 +349,15 @@ function renderAudioGroup(popup) {
   const container = popup.querySelector(".yomi-audio-list");
   if (!container) return;
   const fullList = popup._audioFullList || [];
-  const visibleCount = popup._audioVisibleCount || AudioConfig.maxDisplay;
-
-  const visibleList = fullList.slice(0, visibleCount);
+  const visibleCount = 3;
+  const maxStart = Math.max(0, fullList.length - visibleCount);
+  const start = Math.max(0, Math.min(popup._audioWindowStart || 0, maxStart));
+  popup._audioWindowStart = start;
+  const visibleList = fullList.slice(start, start + visibleCount);
 
   container.innerHTML = visibleList
-    .map((audio, index) => {
+    .map((audio, offset) => {
+      const index = start + offset;
       const speaker = escapeHtml(audio.speaker || `Speaker ${index + 1}`);
       const region = escapeHtml(audio.region || audio.country || "Unknown");
       return `
@@ -350,32 +374,25 @@ function renderAudioGroup(popup) {
     })
     .join("");
 
-  // Nếu còn audio chưa hiển thị
-  if (visibleCount < fullList.length) {
-    const remain = fullList.length - visibleCount;
-
-    container.innerHTML += `
-      <button class="yomi-load-more" title="Load more audio [${getShortcutLabel("audioNext")}]">
-        +${remain}
-      </button>`;
-  }
-
   attachAudioEvents(popup);
-  attachLoadMoreEvent(popup);
   applyAudioFocus(popup);
+  updateForvoMore(popup);
 }
 
-function attachLoadMoreEvent(popup) {
-  const btn = popup.querySelector(".yomi-load-more");
-  if (!btn) return;
-
-  btn.onclick = (e) => {
-    e.stopPropagation();
-
-    popup._audioVisibleCount += 3;
-
-    renderAudioGroup(popup);
-  };
+function updateForvoMore(popup) {
+  const total = popup._audioFullList?.length || 0;
+  const moreBtn = popup.querySelector(".yomi-forvo-more");
+  const moreRow = popup.querySelector(".yomi-forvo-more-row");
+  if (!moreBtn || !moreRow) return;
+  const hasMore = total > 3;
+  if (!hasMore) {
+    moreRow.style.display = "none";
+    return;
+  }
+  const start = popup._audioWindowStart || 0;
+  const remaining = Math.max(0, total - (start + 3));
+  moreBtn.textContent = remaining > 0 ? `More (+${remaining})` : "More";
+  moreRow.style.display = "flex";
 }
 
 function attachAudioEvents(popup) {
@@ -447,6 +464,12 @@ async function playAudioWithUI(popup, index) {
   const fullList = popup._audioFullList || [];
   const item = fullList[index];
   if (!item) return;
+
+  if (!item.url && item.ttsVoiceName) {
+    const text = popup?._cardData?.term || "";
+    if (text) playTtsSentence(text, item.ttsVoiceName);
+    return;
+  }
 
   // 🛑 Dừng audio cũ
   stopAllAudios(popup);
@@ -531,7 +554,7 @@ function applyDefinitionUIState(popup) {
     node.classList.toggle("is-selected", state.selectedDefinitions.has(idx));
   });
   if (nodes[state.focusedDefIndex]) {
-    nodes[state.focusedDefIndex].scrollIntoView({ block: "nearest", behavior: "smooth" });
+    nodes[state.focusedDefIndex].scrollIntoView({ block: "center", behavior: "smooth" });
   }
 }
 
@@ -583,8 +606,8 @@ function renderPopupTtsGroup(popup, sentence, ttsCfg) {
       const lang = escapeHtml(voice.lang || "");
       return `
         <div class="yomi-tts-item" data-index="${index}">
-          <button class="yomi-tts-play" type="button" data-index="${index}" title="Play [${getShortcutLabel("ttsSentence")}]">Play</button>
-          <button class="yomi-tts-body" type="button" data-index="${index}" title="Select voice">
+          <button class="yomi-tts-play" type="button" data-index="${index}" title="Play [${getShortcutLabel("ttsPlay")}]">Play</button>
+          <button class="yomi-tts-body" type="button" data-index="${index}" title="Select [${getShortcutLabel("ttsSelect")}]">
             <span class="yomi-tts-name">${label}</span>
             <span class="yomi-tts-lang">${lang}</span>
           </button>
@@ -648,6 +671,26 @@ function applyTtsFocus(popup) {
   }
 }
 
+function moveTtsFocus(popup, delta) {
+  const total = popup._ttsVoices?.length || 0;
+  if (total === 0) return;
+  let idx = Number(popup._ttsFocused || 0);
+  if (delta > 0) idx = (idx + 1) % total;
+  if (delta < 0) idx = (idx - 1 + total) % total;
+  popup._ttsFocused = idx;
+  applyTtsFocus(popup);
+}
+
+function toggleFocusedTtsSelection(popup) {
+  const idx = Number(popup._ttsFocused || 0);
+  if (popup._state.selectedTts.has(idx)) {
+    popup._state.selectedTts.delete(idx);
+  } else {
+    popup._state.selectedTts.add(idx);
+  }
+  applyTtsFocus(popup);
+}
+
 function renderDefinitionBlocks(popup, data) {
   const container = popup.querySelector(".definition-container");
   const blocks = parseDefinitionBlocks(data);
@@ -707,7 +750,7 @@ function toggleFocusedDefinitionSelection(popup) {
 }
 
 function applyImageFocus(popup) {
-  const nodes = popup.querySelectorAll(".yomi-thumb");
+  const nodes = popup.querySelectorAll(".yomi-thumb-wrap");
   nodes.forEach((node, idx) => {
     node.classList.toggle("is-focused", idx === popup._state.focusedImageIndex);
     node.classList.toggle("is-selected", popup._state.selectedImages.has(idx));
@@ -765,12 +808,16 @@ function toggleFocusedImageSelection(popup) {
 
 function applyAudioFocus(popup) {
   const nodes = popup.querySelectorAll(".yomi-audio-item");
-  nodes.forEach((node, idx) => {
+  nodes.forEach((node) => {
+    const idx = Number(node.getAttribute("data-index"));
     node.classList.toggle("is-focused", idx === popup._state.focusedAudioIndex);
     node.classList.toggle("is-selected", popup._state.selectedAudios.has(idx));
   });
-  if (nodes[popup._state.focusedAudioIndex]) {
-    nodes[popup._state.focusedAudioIndex].scrollIntoView({
+  const focusedNode = Array.from(nodes).find(
+    (node) => Number(node.getAttribute("data-index")) === popup._state.focusedAudioIndex,
+  );
+  if (focusedNode) {
+    focusedNode.scrollIntoView({
       behavior: "smooth",
       block: "nearest",
       inline: "nearest",
@@ -779,24 +826,53 @@ function applyAudioFocus(popup) {
 }
 
 function moveAudioFocus(popup, delta) {
-  const nodes = popup.querySelectorAll(".yomi-audio-item");
-  if (nodes.length === 0) return;
-  let idx = popup._state.focusedAudioIndex;
+  const total = popup._audioFullList?.length || 0;
+  if (total === 0) return;
 
+  let idx = popup._state.focusedAudioIndex || 0;
   if (delta > 0) {
-    if (idx < nodes.length - 1) {
-      idx += 1;
-    } else {
-      const moreBtn = popup.querySelector(".yomi-load-more");
-      if (moreBtn) moreBtn.click();
-    }
+    idx = (idx + 1) % total;
   } else if (delta < 0) {
-    idx = Math.max(0, idx - 1);
+    idx = (idx - 1 + total) % total;
   }
 
   popup._state.focusedAudioIndex = idx;
-  applyAudioFocus(popup);
-  playAudioWithUI(popup, idx);
+  popup._audioWindowStart = Math.max(0, Math.min(idx - 1, Math.max(0, total - 3)));
+  renderAudioGroup(popup);
+  if (popup._audioAutoPlayOnNavigate) {
+    playAudioWithUI(popup, idx);
+  }
+}
+
+function renderOtherDictionaries(popup, data, popupCfg) {
+  const container = popup.querySelector(".yomi-other-list");
+  if (!container) return;
+
+  const otherDicts = popupCfg?.otherDictionaries || [];
+  if (otherDicts.length === 0) {
+    container.innerHTML = '<div class="yomi-feature-placeholder">No external dictionaries configured</div>';
+    return;
+  }
+
+  const term = encodeURIComponent(data.term || "");
+  const sentence = encodeURIComponent(data.sentence || "");
+
+  container.innerHTML = otherDicts
+    .map((dict) => {
+      const url = (dict.url || "")
+        .replace(/\{term\}/g, term)
+        .replace(/\{sentence\}/g, sentence);
+      const name = escapeHtml(dict.name || "Dictionary");
+      return `
+        <div style="margin-bottom:8px;">
+          <a href="${url}" target="_blank" rel="noopener noreferrer" 
+             style="display:block;padding:8px 10px;background:var(--yomi-surface);border:1px solid var(--yomi-border);border-radius:8px;color:var(--yomi-primary);text-decoration:none;font-size:13px;font-weight:600;">
+            ${name} →
+          </a>
+        </div>
+      `;
+    })
+    .join("");
 }
 
 function buildAnkiPayload(dataOfCard, popup) {
@@ -867,10 +943,79 @@ function handlePopupShortcutKeydown(event) {
   if (action === "imageNext") moveImageFocus(activePopup, 1);
   if (action === "imagePrev") moveImageFocus(activePopup, -1);
   if (action === "imageSelect") toggleFocusedImageSelection(activePopup);
-  if (action === "audioNext") moveAudioFocus(activePopup, 1);
-  if (action === "audioPrev") moveAudioFocus(activePopup, -1);
+  if (action === "audioNext") {
+    if (activePopup._availableFeatures?.includes("forvo")) {
+      if (activePopup._activeFeature !== "forvo") {
+        setActiveFeature(activePopup, "forvo");
+        activePopup._state.focusedAudioIndex = 0;
+        activePopup._audioWindowStart = 0;
+        if ((activePopup._audioFullList?.length || 0) > 0) {
+          renderAudioGroup(activePopup);
+        }
+        if (activePopup._audioAutoPlayOnNavigate) {
+          playAudioWithUI(activePopup, activePopup._state.focusedAudioIndex);
+        }
+        return;
+      }
+      if (activePopup._audioAutoPlayOnNavigate) {
+        playAudioWithUI(activePopup, activePopup._state.focusedAudioIndex);
+      }
+    }
+    moveAudioFocus(activePopup, 1);
+  }
+  if (action === "audioPrev") {
+    if (activePopup._availableFeatures?.includes("forvo")) {
+      if (activePopup._activeFeature !== "forvo") {
+        setActiveFeature(activePopup, "forvo");
+        activePopup._state.focusedAudioIndex = 0;
+        activePopup._audioWindowStart = 0;
+        if ((activePopup._audioFullList?.length || 0) > 0) {
+          renderAudioGroup(activePopup);
+        }
+        if (activePopup._audioAutoPlayOnNavigate) {
+          playAudioWithUI(activePopup, activePopup._state.focusedAudioIndex);
+        }
+        return;
+      }
+      if (activePopup._audioAutoPlayOnNavigate) {
+        playAudioWithUI(activePopup, activePopup._state.focusedAudioIndex);
+      }
+    }
+    moveAudioFocus(activePopup, -1);
+  }
   if (action === "audioSelect") toggleFocusedAudioSelection(activePopup);
-  if (action === "ttsSentence") {
+  if (action === "audioPlay") {
+    const focus = activePopup?._state?.focusedAudioIndex ?? 0;
+    playAudioWithUI(activePopup, focus);
+  }
+  if (action === "ttsNext") {
+    if (activePopup._availableFeatures?.includes("tts") && activePopup._activeFeature !== "tts") {
+      setActiveFeature(activePopup, "tts");
+      activePopup._ttsFocused = 0;
+      applyTtsFocus(activePopup);
+      return;
+    }
+    moveTtsFocus(activePopup, 1);
+  }
+  if (action === "ttsPrev") {
+    if (activePopup._availableFeatures?.includes("tts") && activePopup._activeFeature !== "tts") {
+      setActiveFeature(activePopup, "tts");
+      activePopup._ttsFocused = 0;
+      applyTtsFocus(activePopup);
+      return;
+    }
+    moveTtsFocus(activePopup, -1);
+  }
+  if (action === "ttsSelect") {
+    if (activePopup._availableFeatures?.includes("tts") && activePopup._activeFeature !== "tts") {
+      setActiveFeature(activePopup, "tts");
+      activePopup._ttsFocused = 0;
+      applyTtsFocus(activePopup);
+      return;
+    }
+    toggleFocusedTtsSelection(activePopup);
+  }
+  if (action === "ttsPlay") {
     const sentenceText = activePopup._cardData?.sentence || activePopup._cardData?.term || "";
     const ttsVoices = Array.isArray(activePopup._ttsVoices) ? activePopup._ttsVoices : [];
     const focus = Number(activePopup._ttsFocused || 0);
@@ -1017,6 +1162,7 @@ async function showPopup(x, y, data, level) {
   const featureState = resolvePopupFeatures(data, popupCfg);
   newPopup._availableFeatures = featureState.available.slice();
   newPopup._activeFeature = featureState.initial;
+  newPopup._audioAutoPlayOnNavigate = popupCfg?.forvo?.autoplayOnNavigate === true;
   newPopup._state.selectedTts = new Set();
   const savedSize = await loadPopupSize();
   const sentenceHtml = featureState.sentenceVisible
@@ -1044,13 +1190,23 @@ async function showPopup(x, y, data, level) {
           <section class="yomi-feature-toolbar"></section>
           <section class="yomi-feature-body">
             <div class="yomi-feature-pane yomi-forvo-section" data-feature="forvo">
+              <div class="yomi-forvo-head">
+                <span>Forvo audio</span>
+                <div class="yomi-forvo-actions">
+                  <button class="yomi-forvo-play" type="button">Play</button>
+                  <button class="yomi-forvo-play-all" type="button">Play all</button>
+                </div>
+              </div>
               <div class="yomi-audio-list">
                 <div class="yomi-feature-placeholder">Audio pending...</div>
+              </div>
+              <div class="yomi-forvo-more-row">
+                <button class="yomi-load-more yomi-forvo-more" type="button">More</button>
               </div>
             </div>
 
             <div class="yomi-feature-pane yomi-image-section" data-feature="images">
-              <div class="yomi-image-gallery"></div>
+              <div class="yomi-image-gallery"><div class="ocean-image-gallery"></div></div>
               <div class="yomi-image-controls">
                 <button class="yomi-load-more-img" title="Load more images [${getShortcutLabel("imageNext")}]">More images</button>
               </div>
@@ -1066,6 +1222,10 @@ async function showPopup(x, y, data, level) {
 
             <div class="yomi-feature-pane yomi-sentence-section" data-feature="sentence">
               ${sentenceHtml}
+            </div>
+
+            <div class="yomi-feature-pane yomi-other-section" data-feature="other">
+              <div class="yomi-other-list"></div>
             </div>
           </section>
         </section>
@@ -1091,6 +1251,9 @@ async function showPopup(x, y, data, level) {
     if (ttsPane) ttsPane.style.display = "none";
   }
 
+  // Render Other Dictionaries
+  renderOtherDictionaries(newPopup, data, popupCfg);
+
   // Gắn sự kiện Add to Anki
   const addBtn = newPopup.querySelector(".yomi-add-anki-btn");
 
@@ -1106,6 +1269,35 @@ async function showPopup(x, y, data, level) {
 
   // 4. ĐI LẤY DỮ LIỆU THẬT (Bất đồng bộ)
   const audioContainer = newPopup.querySelector(".yomi-audio-list");
+  const forvoHead = newPopup.querySelector(".yomi-forvo-head");
+  const forvoActions = newPopup.querySelector(".yomi-forvo-actions");
+  const moreRow = newPopup.querySelector(".yomi-forvo-more-row");
+  const playFocusBtn = newPopup.querySelector(".yomi-forvo-play");
+  const playAllBtn = newPopup.querySelector(".yomi-forvo-play-all");
+  const moreBtn = newPopup.querySelector(".yomi-forvo-more");
+  if (playFocusBtn) {
+    playFocusBtn.onclick = () => {
+      const idx = Number(newPopup._state.focusedAudioIndex || 0);
+      playAudioWithUI(newPopup, idx);
+    };
+  }
+  if (playAllBtn) {
+    playAllBtn.onclick = () => {
+      const total = newPopup._audioFullList?.length || 0;
+      const count = Math.min(3, total);
+      if (count > 0) playMultipleAudios(newPopup, count);
+    };
+  }
+  if (moreBtn) {
+    moreBtn.onclick = (e) => {
+      e.stopPropagation();
+      const total = newPopup._audioFullList?.length || 0;
+      if (total <= 3) return;
+      const next = (newPopup._audioWindowStart || 0) + 3;
+      newPopup._audioWindowStart = next >= total ? 0 : next;
+      renderAudioGroup(newPopup);
+    };
+  }
 
   function loadForvoAudio() {
     if (!audioContainer) return;
@@ -1117,12 +1309,12 @@ async function showPopup(x, y, data, level) {
       if (processed.fullList && processed.fullList.length > 0) {
         newPopup._audioFullList = processed.fullList;
         data.audio = newPopup._audioFullList?.[0]?.url;
-        newPopup._audioVisibleCount = AudioConfig.maxDisplay;
+        newPopup._audioWindowStart = 0;
         renderAudioGroup(newPopup);
 
         const autoCount = Math.min(
           AudioConfig.autoPlayCount || 0,
-          newPopup._audioVisibleCount || 0,
+          3,
           newPopup._audioFullList.length || 0,
         );
         if (autoCount > 0) {
@@ -1131,16 +1323,32 @@ async function showPopup(x, y, data, level) {
           }, 260);
         }
       } else {
-        audioContainer.innerHTML = `<div class="yomi-feature-placeholder">No audio</div>`;
+        const ttsRows = getTtsVoiceRows(popupCfg.tts || {});
+        if (ttsRows.length > 0) {
+          newPopup._audioFullList = ttsRows.map((row) => ({
+            url: "",
+            ttsVoiceName: row.voiceName,
+            speaker: row.voiceName,
+            region: row.lang || "TTS",
+          }));
+          newPopup._audioWindowStart = 0;
+          renderAudioGroup(newPopup);
+        } else {
+          audioContainer.innerHTML = `<div class="yomi-feature-placeholder">No audio</div>`;
+        }
       }
     });
   }
 
   if (!featureState.forvoVisible || !AudioConfig.forvoEnabled) {
     if (audioContainer) audioContainer.innerHTML = `<div class="yomi-feature-placeholder">Forvo disabled</div>`;
+    if (forvoHead) forvoHead.style.display = "none";
+    if (moreRow) moreRow.style.display = "none";
     newPopup._audioFullList = [];
     newPopup._audioVisibleCount = 0;
   } else if (AudioConfig.forvoMode === "manual") {
+    if (forvoHead) forvoHead.style.display = "flex";
+    if (moreRow) moreRow.style.display = "none";
     if (audioContainer) {
       audioContainer.innerHTML = `<button class="yomi-forvo-load yomi-load-more" title="Load audio [${getShortcutLabel("audioNext")}]">Load audio</button>`;
       const btn = audioContainer.querySelector(".yomi-forvo-load");
@@ -1152,6 +1360,8 @@ async function showPopup(x, y, data, level) {
       }
     }
   } else {
+    if (forvoHead) forvoHead.style.display = "flex";
+    if (moreRow) moreRow.style.display = "flex";
     loadForvoAudio();
   }
 
@@ -1187,79 +1397,99 @@ async function showPopup(x, y, data, level) {
   // --- ĐOẠN THÊM MỚI: Ảnh ---
   if (featureState.imageVisible) {
     let allImageUrls = [];
-    let visibleImageCount = 0;
+    let remainingUrls = [];
+    let loadedUrls = [];
+    let failedAttempts = 0;
     const gallery = newPopup.querySelector(".yomi-image-gallery");
     const loadMoreBtn = newPopup.querySelector(".yomi-load-more-img");
     newPopup._allImageUrls = [];
+    const maxLinks = Math.min(20, Math.max(5, Number(popupCfg?.image?.maxLinks) || 20));
+    const autoLoadCount = Math.min(5, Math.max(1, Number(popupCfg?.image?.autoLoadCount) || 3));
+    const retryLimit = Math.min(10, Math.max(0, Number(popupCfg?.image?.retryLimit) ?? 5));
 
     function reindexImages() {
-      gallery.querySelectorAll(".yomi-thumb").forEach((img, idx) => {
-        img.setAttribute("data-image-index", String(idx));
+      gallery.querySelectorAll(".yomi-thumb-wrap").forEach((wrap, idx) => {
+        wrap.setAttribute("data-image-index", String(idx));
       });
     }
 
-    function renderImages() {
-      const nextBatch = allImageUrls.slice(
-        visibleImageCount,
-        visibleImageCount + 3,
-      );
-      nextBatch.forEach((url) => {
-        const img = document.createElement("img");
-        img.src = url;
-        img.className = "yomi-thumb";
-        img.title = `Image [${getShortcutLabel("imageNext")}/${getShortcutLabel("imagePrev")}] • Select [${getShortcutLabel("imageSelect")}]`;
-        img.onerror = () => {
-          allImageUrls = allImageUrls.filter((candidate) => candidate !== url);
-          newPopup._allImageUrls = allImageUrls.slice();
-          img.remove();
-          visibleImageCount = Math.min(visibleImageCount, allImageUrls.length);
-          reindexImages();
-          applyImageFocus(newPopup);
-        };
-
-        // Sự kiện khi nhấn chọn ảnh
-        img.onclick = () => {
-          const index = Number(img.getAttribute("data-image-index"));
-          newPopup._state.focusedImageIndex = index;
-          toggleFocusedImageSelection(newPopup);
-        };
-
-        gallery.appendChild(img);
-      });
-
-      visibleImageCount += nextBatch.length;
-      newPopup._allImageUrls = allImageUrls.slice();
-      reindexImages();
-
-      // Hiện/Ẩn nút "Xem thêm"
-      if (visibleImageCount < allImageUrls.length) {
-        const remaining = allImageUrls.length - visibleImageCount;
-        loadMoreBtn.innerText = `More images (+${remaining})`;
+    function updateMoreButton() {
+      if (!loadMoreBtn) return;
+      const remaining = remainingUrls.length;
+      if (remaining > 0) {
+        loadMoreBtn.textContent = `More images (+${remaining})`;
         loadMoreBtn.style.display = "inline-flex";
       } else {
         loadMoreBtn.style.display = "none";
       }
-
-      applyImageFocus(newPopup);
     }
 
-    // Gọi lấy dữ liệu
-    runtimeMessageWithTimeout({ action: "fetchImages", term: data.term }, 5000)
+    function appendImage(url, targetCount) {
+      const wrap = document.createElement("div");
+      wrap.className = "yomi-thumb-wrap";
+      const img = document.createElement("img");
+      img.src = url;
+      img.className = "yomi-thumb";
+      img.title = `Image [${getShortcutLabel("imageNext")}/${getShortcutLabel("imagePrev")}] • Select [${getShortcutLabel("imageSelect")}]`;
+
+      wrap.onclick = () => {
+        const index = Number(wrap.getAttribute("data-image-index"));
+        newPopup._state.focusedImageIndex = index;
+        toggleFocusedImageSelection(newPopup);
+      };
+
+      img.onload = () => {
+        loadedUrls.push(url);
+        newPopup._allImageUrls = loadedUrls.slice();
+        wrap.appendChild(img);
+        gallery.appendChild(wrap);
+        reindexImages();
+        applyImageFocus(newPopup);
+        loadUntil(targetCount);
+      };
+
+      img.onerror = () => {
+        failedAttempts += 1;
+        loadUntil(targetCount);
+      };
+    }
+
+    function loadUntil(targetCount) {
+      if (loadedUrls.length >= targetCount) {
+        updateMoreButton();
+        return;
+      }
+      if (remainingUrls.length === 0) {
+        updateMoreButton();
+        return;
+      }
+      if (failedAttempts >= retryLimit) {
+        updateMoreButton();
+        return;
+      }
+      const url = remainingUrls.shift();
+      appendImage(url, targetCount);
+    }
+
+    runtimeMessageWithTimeout({ action: "fetchImages", term: data.term, maxLinks }, 5000)
       .then((res) => {
         if (res && res.success && Array.isArray(res.urls) && res.urls.length > 0) {
-          allImageUrls = res.urls.slice();
-          renderImages(); // Hiện 3 cái đầu
+          allImageUrls = res.urls.slice(0, maxLinks);
+          remainingUrls = allImageUrls.slice();
+          loadUntil(autoLoadCount);
         } else {
           gallery.innerHTML = "";
-          loadMoreBtn.style.display = "none";
+          updateMoreButton();
         }
       })
       .catch(() => {
         gallery.innerHTML = "";
-        loadMoreBtn.style.display = "none";
+        updateMoreButton();
       });
 
-    loadMoreBtn.onclick = () => renderImages();
+    if (loadMoreBtn) {
+      loadMoreBtn.onclick = () => loadUntil(loadedUrls.length + autoLoadCount);
+    }
   } else {
     newPopup._allImageUrls = [];
   }
@@ -1325,7 +1555,7 @@ document.addEventListener("mousemove", (event) => {
     // Nếu chuột ra vùng trống, đợi 0.5s rồi dọn sạch chiến trường
     if (!globalCloseTimer) {
       globalCloseTimer = setTimeout(() => {
-        removePopupsAbove(0);
+        // removePopupsAbove(0);  
         globalCloseTimer = null;
       }, 150);
     }

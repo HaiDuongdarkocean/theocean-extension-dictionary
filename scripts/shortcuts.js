@@ -14,7 +14,13 @@
     audioNext: "Audio next",
     audioPrev: "Audio previous",
     audioSelect: "Select audio",
-    ttsSentence: "Play TTS sentence",
+    audioPlay: "Play focused audio",
+    ttsPrev: "TTS previous",
+    ttsSelect: "Select TTS",
+    ttsNext: "TTS next",
+    ttsPlay: "Play focused TTS",
+    showOther: "Show other dictionaries",
+    showSentence: "Show sentence",
   };
 
   const DEFAULT_SHORTCUTS = {
@@ -24,13 +30,19 @@
     addToAnki: { code: "KeyR", shift: false, ctrl: false, alt: false, meta: false },
     updateCard: { code: "KeyU", shift: false, ctrl: false, alt: false, meta: false },
     viewBrowser: { code: "KeyT", shift: false, ctrl: false, alt: false, meta: false },
-    imageNext: { code: "KeyQ", shift: false, ctrl: false, alt: false, meta: false },
-    imagePrev: { code: "KeyE", shift: false, ctrl: false, alt: false, meta: false },
+    imageNext: { code: "KeyE", shift: false, ctrl: false, alt: false, meta: false },
+    imagePrev: { code: "KeyQ", shift: false, ctrl: false, alt: false, meta: false },
     imageSelect: { code: "KeyW", shift: false, ctrl: false, alt: false, meta: false },
-    audioNext: { code: "KeyA", shift: false, ctrl: false, alt: false, meta: false },
-    audioPrev: { code: "KeyD", shift: false, ctrl: false, alt: false, meta: false },
+    audioNext: { code: "KeyD", shift: false, ctrl: false, alt: false, meta: false },
+    audioPrev: { code: "KeyA", shift: false, ctrl: false, alt: false, meta: false },
     audioSelect: { code: "KeyS", shift: false, ctrl: false, alt: false, meta: false },
-    ttsSentence: { code: "KeyG", shift: false, ctrl: false, alt: false, meta: false },
+    audioPlay: { code: "KeyF", shift: false, ctrl: false, alt: false, meta: false },
+    ttsPrev: { code: "KeyG", shift: false, ctrl: false, alt: false, meta: false },
+    ttsSelect: { code: "KeyH", shift: false, ctrl: false, alt: false, meta: false },
+    ttsNext: { code: "KeyJ", shift: false, ctrl: false, alt: false, meta: false },
+    ttsPlay: { code: "KeyK", shift: false, ctrl: false, alt: false, meta: false },
+    showOther: { code: "KeyV", shift: false, ctrl: false, alt: false, meta: false },
+    showSentence: { code: "KeyB", shift: false, ctrl: false, alt: false, meta: false },
   };
 
   function normalizeShortcut(raw, fallback) {

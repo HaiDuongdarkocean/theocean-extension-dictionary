@@ -210,7 +210,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
   // Lấy ảnh từ Google Images
   if (request.action === "fetchImages") {
-    fetchImagesFromGoogle(request.term)
+    const maxLinks = Number(request.maxLinks) || 20;
+    fetchImagesFromGoogle(request.term, maxLinks)
       .then((urls) => sendResponse({ success: true, urls }))
       .catch((err) => sendResponse({ success: false, error: err.message }));
     return true;
@@ -219,7 +220,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
 // background.js
 
-async function fetchImagesFromGoogle(term) {
+async function fetchImagesFromGoogle(term, maxLinks = 20) {
   try {
     // Tăng quy mô tìm kiếm để có nhiều ảnh hơn
     const url = `https://www.google.com/search?q=${encodeURIComponent(term)}&tbm=isch`;
@@ -244,7 +245,7 @@ async function fetchImagesFromGoogle(term) {
       ) {
         images.push(link);
       }
-      if (images.length >= 20) break; // Lấy tối đa 20 ảnh
+      if (images.length >= maxLinks) break;
     }
     return images;
   } catch (e) {

@@ -1,5 +1,5 @@
 /**
- * options.js 
+ * options.js
  * Quản lý toàn bộ giao diện cài đặt của Yomitan Pro
  */
 import { getConfig, saveConfig } from "./configManager.js";
@@ -54,24 +54,39 @@ async function setupAnkiPanel() {
   const ankiStatus = document.getElementById("ankiStatus");
   try {
     // Lấy dữ liệu từ Anki Connect
-    const [decks, models] = await Promise.all([getDeckNames(), getModelNames()]);
+    const [decks, models] = await Promise.all([
+      getDeckNames(),
+      getModelNames(),
+    ]);
 
     const deckSelect = document.getElementById("deckSelect");
     const modelSelect = document.getElementById("modelSelect");
 
     // Đổ dữ liệu vào Select
-    deckSelect.innerHTML = decks.map(d => `<option value="${d}">${d}</option>`).join("");
-    modelSelect.innerHTML = models.map(m => `<option value="${m}">${m}</option>`).join("");
+    deckSelect.innerHTML = decks
+      .map((d) => `<option value="${d}">${d}</option>`)
+      .join("");
+    modelSelect.innerHTML = models
+      .map((m) => `<option value="${m}">${m}</option>`)
+      .join("");
 
     // Load cài đặt đã lưu
     const savedAnki = await loadAnkiConfig();
     deckSelect.value = savedAnki.deckName || "";
     modelSelect.value = savedAnki.modelName || "";
-    document.getElementById("tagsInput").value = (savedAnki.tags || []).join(",");
-    const allowDuplicateToggle = document.getElementById("allowDuplicateToggle");
-    if (allowDuplicateToggle) allowDuplicateToggle.checked = savedAnki.allowDuplicate !== false;
-    const showBrowserBtnToggle = document.getElementById("showBrowserBtnToggle");
-    if (showBrowserBtnToggle) showBrowserBtnToggle.checked = savedAnki.showBrowserButton !== false;
+    document.getElementById("tagsInput").value = (savedAnki.tags || []).join(
+      ",",
+    );
+    const allowDuplicateToggle = document.getElementById(
+      "allowDuplicateToggle",
+    );
+    if (allowDuplicateToggle)
+      allowDuplicateToggle.checked = savedAnki.allowDuplicate !== false;
+    const showBrowserBtnToggle = document.getElementById(
+      "showBrowserBtnToggle",
+    );
+    if (showBrowserBtnToggle)
+      showBrowserBtnToggle.checked = savedAnki.showBrowserButton !== false;
 
     // Hiển thị bảng Mapping nếu đã chọn Model
     if (savedAnki.modelName) {
@@ -88,7 +103,8 @@ async function setupAnkiPanel() {
     ankiStatus.innerText = "💚 Kết nối Anki thành công";
   } catch (err) {
     console.error("Anki Error:", err);
-    ankiStatus.innerHTML = "<b style='color:red'>😵 Không kết nối được Anki. Hãy mở Anki Desktop và bật AnkiConnect.</b>";
+    ankiStatus.innerHTML =
+      "<b style='color:red'>😵 Không kết nối được Anki. Hãy mở Anki Desktop và bật AnkiConnect.</b>";
   }
 }
 
@@ -108,8 +124,14 @@ function renderFieldMappingTable(modelFields, savedMapping) {
 
     const select = document.createElement("select");
     select.dataset.extField = extField;
-    select.innerHTML = `<option value="">-- Bỏ qua (Ignore) --</option>` +
-      modelFields.map(mf => `<option value="${mf}" ${savedMapping[extField] === mf ? 'selected' : ''}>${mf}</option>`).join("");
+    select.innerHTML =
+      `<option value="">-- Bỏ qua (Ignore) --</option>` +
+      modelFields
+        .map(
+          (mf) =>
+            `<option value="${mf}" ${savedMapping[extField] === mf ? "selected" : ""}>${mf}</option>`,
+        )
+        .join("");
 
     row.appendChild(label);
     row.appendChild(select);
@@ -123,16 +145,38 @@ async function setupAudioPanel() {
   const voices = await TTSModule.getAvailableVoices();
 
   document.getElementById("ttsEnabled").checked = config.tts?.enabled || false;
-  document.getElementById("ttsMaxDisplay").value = String(config.tts?.maxDisplay || 1);
-  document.getElementById("ttsAutoplayCount").value = String(config.tts?.autoplayCount ?? 0);
+  document.getElementById("ttsMaxDisplay").value = String(
+    config.tts?.maxDisplay || 1,
+  );
+  document.getElementById("ttsAutoplayCount").value = String(
+    config.tts?.autoplayCount ?? 0,
+  );
 
-  document.getElementById("forvoEnabled").checked = config.forvo?.enabled ?? true;
+  document.getElementById("forvoEnabled").checked =
+    config.forvo?.enabled ?? true;
   document.getElementById("forvoMode").value = config.forvo?.mode || "auto";
-  document.getElementById("forvoMaxDisplay").value = String(config.forvo?.maxDisplay || 3);
-  document.getElementById("forvoAutoplayCount").value = String(config.forvo?.autoplayCount ?? 1);
+  document.getElementById("forvoMaxDisplay").value = String(
+    config.forvo?.maxDisplay || 3,
+  );
+  document.getElementById("forvoAutoplayCount").value = String(
+    config.forvo?.autoplayCount ?? 1,
+  );
+  const autoplayOnNavigateToggle = document.getElementById(
+    "forvoAutoplayOnNavigate",
+  );
+  if (autoplayOnNavigateToggle)
+    autoplayOnNavigateToggle.checked =
+      config.forvo?.autoplayOnNavigate === true;
 
-  const savedVoices = Array.isArray(config.tts?.savedVoices) ? config.tts.savedVoices : [];
-  const savedVoiceMap = new Map(savedVoices.map((v, idx) => [v.voiceName, { ...v, order: Number(v.order) || idx + 1 }]));
+  const savedVoices = Array.isArray(config.tts?.savedVoices)
+    ? config.tts.savedVoices
+    : [];
+  const savedVoiceMap = new Map(
+    savedVoices.map((v, idx) => [
+      v.voiceName,
+      { ...v, order: Number(v.order) || idx + 1 },
+    ]),
+  );
 
   const alphabeticalVoices = voices
     .slice()
@@ -140,15 +184,23 @@ async function setupAudioPanel() {
 
   // Voice options for TTS slots should prioritize saved list.
   const voiceOptionsForSlots = (() => {
-    const selected = alphabeticalVoices.filter((v) => savedVoiceMap.has(v.voiceName));
+    const selected = alphabeticalVoices.filter((v) =>
+      savedVoiceMap.has(v.voiceName),
+    );
     return selected.length > 0 ? selected : alphabeticalVoices;
   })();
 
   const populateVoice = (selectId, currentVoice) => {
     const select = document.getElementById(selectId);
     if (!select) return;
-    select.innerHTML = '<option value="">-- Mặc định hệ thống --</option>' +
-      voiceOptionsForSlots.map(v => `<option value="${v.voiceName}" ${v.voiceName === currentVoice ? 'selected' : ''}>${v.voiceName} (${v.lang})</option>`).join("");
+    select.innerHTML =
+      '<option value="">-- Mặc định hệ thống --</option>' +
+      voiceOptionsForSlots
+        .map(
+          (v) =>
+            `<option value="${v.voiceName}" ${v.voiceName === currentVoice ? "selected" : ""}>${v.voiceName} (${v.lang})</option>`,
+        )
+        .join("");
   };
 
   populateVoice("voice1", config.tts?.voices?.[0]);
@@ -178,7 +230,9 @@ async function setupAudioPanel() {
   function normalizeOrders() {
     testerVoices = testerVoices
       .slice()
-      .sort((a, b) => a.order - b.order || a.voiceName.localeCompare(b.voiceName))
+      .sort(
+        (a, b) => a.order - b.order || a.voiceName.localeCompare(b.voiceName),
+      )
       .map((item, idx) => ({ ...item, order: idx + 1 }));
   }
 
@@ -188,15 +242,15 @@ async function setupAudioPanel() {
     voiceListEl.innerHTML = testerVoices
       .map(
         (v) => `
-          <div class="voice-item" draggable="true" data-voice="${v.voiceName}">
+        <div class="voice-item" draggable="true" data-voice="${v.voiceName}">
+        <span class="voice-drag" title="Drag to reorder">Drag</span>
+          <input class="voice-order" type="number" min="1" value="${v.order}" data-order-voice="${v.voiceName}">
+          <button class="btn voice-play-btn" type="button" data-play-voice="${v.voiceName}">Play</button>
             <label>
               <input type="checkbox" class="tts-voice-checkbox" data-voice="${v.voiceName}" ${v.selected ? "checked" : ""}>
+              <span class="voice-meta">${v.lang}${v.gender ? " • " + v.gender : ""}</span>
               <span>${v.voiceName}</span>
             </label>
-            <span class="voice-meta">${v.lang}${v.gender ? " • " + v.gender : ""}</span>
-            <input class="voice-order" type="number" min="1" value="${v.order}" data-order-voice="${v.voiceName}">
-            <button class="btn voice-play-btn" type="button" data-play-voice="${v.voiceName}">Play</button>
-            <span class="voice-drag" title="Drag to reorder">Drag</span>
           </div>
         `,
       )
@@ -281,9 +335,14 @@ async function setupAudioPanel() {
       item.addEventListener("drop", (e) => {
         e.preventDefault();
         const targetVoice = item.getAttribute("data-voice");
-        if (!draggingVoice || !targetVoice || draggingVoice === targetVoice) return;
-        const fromIdx = testerVoices.findIndex((v) => v.voiceName === draggingVoice);
-        const toIdx = testerVoices.findIndex((v) => v.voiceName === targetVoice);
+        if (!draggingVoice || !targetVoice || draggingVoice === targetVoice)
+          return;
+        const fromIdx = testerVoices.findIndex(
+          (v) => v.voiceName === draggingVoice,
+        );
+        const toIdx = testerVoices.findIndex(
+          (v) => v.voiceName === targetVoice,
+        );
         if (fromIdx < 0 || toIdx < 0) return;
         const copy = testerVoices.slice();
         const [moved] = copy.splice(fromIdx, 1);
@@ -303,12 +362,16 @@ async function setupAudioPanel() {
     const list = getSelectedVoices();
     for (const v of list) {
       await new Promise((resolve) => {
-        chrome.tts.speak(text, { voiceName: v.voiceName || undefined, onEvent: (e) => {
-          if (e.type === "end" || e.type === "error") resolve();
-        }});
+        chrome.tts.speak(text, {
+          voiceName: v.voiceName || undefined,
+          onEvent: (e) => {
+            if (e.type === "end" || e.type === "error") resolve();
+          },
+        });
       });
     }
-    if (statusEl) statusEl.textContent = sequenceOnly ? "Played selected voices" : "";
+    if (statusEl)
+      statusEl.textContent = sequenceOnly ? "Played selected voices" : "";
   }
 
   playBtn?.addEventListener("click", () => speakVoices(true));
@@ -419,7 +482,9 @@ async function setupDictionaryPanel() {
   if (resultModeSelect) {
     resultModeSelect.value = config.lookupResultMode || "stacked";
   }
-  const popupDefaultFeatureSelect = document.getElementById("popupDefaultFeature");
+  const popupDefaultFeatureSelect = document.getElementById(
+    "popupDefaultFeature",
+  );
   if (popupDefaultFeatureSelect) {
     popupDefaultFeatureSelect.value = config.popup?.defaultFeature || "forvo";
   }
@@ -427,21 +492,112 @@ async function setupDictionaryPanel() {
 
 async function setupSentencePanel() {
   const config = await getConfig();
-  document.getElementById("showSentenceToggle")?.setAttribute("checked", config.sentence?.showSentence !== false ? "checked" : "");
+  document
+    .getElementById("showSentenceToggle")
+    ?.setAttribute(
+      "checked",
+      config.sentence?.showSentence !== false ? "checked" : "",
+    );
   const sentenceCheckbox = document.getElementById("showSentenceToggle");
-  if (sentenceCheckbox) sentenceCheckbox.checked = config.sentence?.showSentence !== false;
+  if (sentenceCheckbox)
+    sentenceCheckbox.checked = config.sentence?.showSentence !== false;
 
-  const translationCheckbox = document.getElementById("showSentenceTranslationToggle");
-  if (translationCheckbox) translationCheckbox.checked = config.sentence?.showTranslation !== false;
+  const translationCheckbox = document.getElementById(
+    "showSentenceTranslationToggle",
+  );
+  if (translationCheckbox)
+    translationCheckbox.checked = config.sentence?.showTranslation !== false;
 
   const translateEnable = document.getElementById("enableTranslate");
-  if (translateEnable) translateEnable.checked = config.translateEnabled || false;
+  if (translateEnable)
+    translateEnable.checked = config.translateEnabled || false;
 }
 
 async function setupImagesPanel() {
   const config = await getConfig();
   const imgToggle = document.getElementById("imageEnabled");
   if (imgToggle) imgToggle.checked = config.image?.enabled !== false;
+  const maxLinks = document.getElementById("imageMaxLinks");
+  if (maxLinks) maxLinks.value = String(config.image?.maxLinks || 20);
+  const autoLoad = document.getElementById("imageAutoLoadCount");
+  if (autoLoad) autoLoad.value = String(config.image?.autoLoadCount || 3);
+  const retryLimit = document.getElementById("imageRetryLimit");
+  if (retryLimit) retryLimit.value = String(config.image?.retryLimit ?? 5);
+}
+
+async function setupOtherDictPanel() {
+  const config = await getConfig();
+  const otherDicts = config.otherDictionaries || [];
+  const listEl = document.getElementById("otherDictList");
+  const addBtn = document.getElementById("addOtherDictBtn");
+  const statusEl = document.getElementById("otherDictStatus");
+
+  function renderList() {
+    if (!listEl) return;
+    if (otherDicts.length === 0) {
+      listEl.innerHTML = '<p class="hint">No external dictionaries added yet.</p>';
+      return;
+    }
+
+    listEl.innerHTML = otherDicts
+      .map(
+        (dict, index) => `
+        <div class="row" style="margin-bottom:12px;border:1px solid var(--border);padding:10px;border-radius:8px;">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:1;">
+            <div style="display:flex;gap:8px;align-items:center;">
+              <input type="text" placeholder="Name (e.g. Cambridge)" value="${dict.name || ""}" data-index="${index}" data-field="name" style="flex:1;" />
+              <button class="btn btn--danger" data-index="${index}" data-action="delete" type="button">Delete</button>
+            </div>
+            <input type="text" placeholder="URL with {term} or {sentence}" value="${dict.url || ""}" data-index="${index}" data-field="url" style="width:100%;" />
+          </div>
+        </div>
+      `,
+      )
+      .join("");
+
+    listEl.querySelectorAll('input[data-field]').forEach((input) => {
+      input.addEventListener('input', debounce(async () => {
+        const index = Number(input.dataset.index);
+        const field = input.dataset.field;
+        if (otherDicts[index]) {
+          otherDicts[index][field] = input.value;
+          await saveOtherDicts();
+        }
+      }, 350));
+    });
+
+    listEl.querySelectorAll('button[data-action="delete"]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const index = Number(btn.dataset.index);
+        otherDicts.splice(index, 1);
+        await saveOtherDicts();
+        renderList();
+      });
+    });
+  }
+
+  async function saveOtherDicts() {
+    const current = await getConfig();
+    await saveConfig({
+      ...current,
+      otherDictionaries: otherDicts,
+    });
+    if (statusEl) {
+      statusEl.textContent = 'Saved';
+      statusEl.style.color = 'green';
+      setTimeout(() => (statusEl.textContent = ''), 1200);
+    }
+  }
+
+  if (addBtn) {
+    addBtn.addEventListener('click', async () => {
+      otherDicts.push({ name: '', url: '' });
+      await saveOtherDicts();
+      renderList();
+    });
+  }
+
+  renderList();
 }
 
 async function setupShortcutPanel() {
@@ -558,7 +714,8 @@ async function setupShortcutPanel() {
       render();
       statusEl.textContent = "Reset to defaults";
       setTimeout(() => {
-        if (statusEl.textContent === "Reset to defaults") statusEl.textContent = "";
+        if (statusEl.textContent === "Reset to defaults")
+          statusEl.textContent = "";
       }, 900);
     });
   }
@@ -574,11 +731,31 @@ async function saveGeneralSettings(statusId) {
   try {
     const currentGeneralConfig = await getConfig();
 
-    const maxDisplay = clampInt(document.getElementById("forvoMaxDisplay")?.value, 1, 3, 3);
-    const autoplayCountRaw = clampInt(document.getElementById("forvoAutoplayCount")?.value, 0, 3, 1);
+    const maxDisplay = clampInt(
+      document.getElementById("forvoMaxDisplay")?.value,
+      1,
+      3,
+      3,
+    );
+    const autoplayCountRaw = clampInt(
+      document.getElementById("forvoAutoplayCount")?.value,
+      0,
+      3,
+      1,
+    );
     const autoplayCount = Math.min(autoplayCountRaw, maxDisplay);
-    const ttsMaxDisplay = clampInt(document.getElementById("ttsMaxDisplay")?.value, 1, 3, 1);
-    const ttsAutoplayRaw = clampInt(document.getElementById("ttsAutoplayCount")?.value, 0, 3, 0);
+    const ttsMaxDisplay = clampInt(
+      document.getElementById("ttsMaxDisplay")?.value,
+      1,
+      3,
+      1,
+    );
+    const ttsAutoplayRaw = clampInt(
+      document.getElementById("ttsAutoplayCount")?.value,
+      0,
+      3,
+      0,
+    );
     const ttsAutoplayCount = Math.min(ttsAutoplayRaw, ttsMaxDisplay);
 
     const newGeneralConfig = {
@@ -588,22 +765,47 @@ async function saveGeneralSettings(statusId) {
         document.getElementById("lookupResultMode")?.value || "stacked",
       popup: {
         ...(currentGeneralConfig.popup || {}),
-        defaultFeature: document.getElementById("popupDefaultFeature")?.value || "forvo",
+        defaultFeature:
+          document.getElementById("popupDefaultFeature")?.value || "forvo",
       },
-      translateEnabled: document.getElementById("enableTranslate")?.checked || false,
+      translateEnabled:
+        document.getElementById("enableTranslate")?.checked || false,
       sentence: {
-        showSentence: document.getElementById("showSentenceToggle")?.checked ?? true,
-        showTranslation: document.getElementById("showSentenceTranslationToggle")?.checked ?? true,
+        showSentence:
+          document.getElementById("showSentenceToggle")?.checked ?? true,
+        showTranslation:
+          document.getElementById("showSentenceTranslationToggle")?.checked ??
+          true,
       },
       forvo: {
         enabled: document.getElementById("forvoEnabled")?.checked ?? true,
         mode: document.getElementById("forvoMode")?.value || "auto",
         maxDisplay,
         autoplayCount,
+        autoplayOnNavigate:
+          document.getElementById("forvoAutoplayOnNavigate")?.checked ?? false,
       },
       image: {
         ...(currentGeneralConfig.image || {}),
         enabled: document.getElementById("imageEnabled")?.checked ?? true,
+        maxLinks: clampInt(
+          document.getElementById("imageMaxLinks")?.value,
+          5,
+          20,
+          20,
+        ),
+        autoLoadCount: clampInt(
+          document.getElementById("imageAutoLoadCount")?.value,
+          1,
+          5,
+          3,
+        ),
+        retryLimit: clampInt(
+          document.getElementById("imageRetryLimit")?.value,
+          0,
+          10,
+          5,
+        ),
       },
       tts: {
         enabled: document.getElementById("ttsEnabled")?.checked || false,
@@ -618,7 +820,7 @@ async function saveGeneralSettings(statusId) {
         savedVoices: Array.isArray(currentGeneralConfig.tts?.savedVoices)
           ? currentGeneralConfig.tts.savedVoices
           : [],
-      }
+      },
     };
     await saveConfig(newGeneralConfig);
 
@@ -628,7 +830,6 @@ async function saveGeneralSettings(statusId) {
       statusEl.style.color = "green";
       setTimeout(() => (statusEl.innerText = ""), 1200);
     }
-    
   } catch (err) {
     alert("Có lỗi khi lưu: " + err.message);
   }
@@ -637,11 +838,13 @@ async function saveGeneralSettings(statusId) {
 async function saveAnkiSettings(statusId) {
   try {
     const fieldMapping = {};
-    document.querySelectorAll("#fieldMappingContainer select").forEach((select) => {
-      if (select.value) {
-        fieldMapping[select.dataset.extField] = select.value;
-      }
-    });
+    document
+      .querySelectorAll("#fieldMappingContainer select")
+      .forEach((select) => {
+        if (select.value) {
+          fieldMapping[select.dataset.extField] = select.value;
+        }
+      });
 
     const ankiConfig = {
       deckName: document.getElementById("deckSelect")?.value || "",
@@ -650,8 +853,10 @@ async function saveAnkiSettings(statusId) {
         .split(",")
         .map((t) => t.trim())
         .filter(Boolean),
-      allowDuplicate: document.getElementById("allowDuplicateToggle")?.checked ?? true,
-      showBrowserButton: document.getElementById("showBrowserBtnToggle")?.checked ?? true,
+      allowDuplicate:
+        document.getElementById("allowDuplicateToggle")?.checked ?? true,
+      showBrowserButton:
+        document.getElementById("showBrowserBtnToggle")?.checked ?? true,
       fieldMapping,
     };
 
@@ -756,7 +961,8 @@ async function renderResources() {
   const freqs = resources.filter((r) => r.kind === "frequency");
 
   container.innerHTML =
-    renderGroup("Dictionaries", "dictionary", dicts) + renderGroup("Frequencies", "frequency", freqs);
+    renderGroup("Dictionaries", "dictionary", dicts) +
+    renderGroup("Frequencies", "frequency", freqs);
 
   async function persistOrderByKind(kind) {
     const ids = Array.from(
@@ -792,9 +998,18 @@ async function renderResources() {
       const targetId = row.dataset.id;
       const kind = row.dataset.kind;
       if (!draggingRowId || draggingRowId === targetId) return;
-      const draggingRow = container.querySelector(`.resource-row[data-id="${draggingRowId}"]`);
-      const targetRow = container.querySelector(`.resource-row[data-id="${targetId}"]`);
-      if (!draggingRow || !targetRow || draggingRow.dataset.kind !== targetRow.dataset.kind) return;
+      const draggingRow = container.querySelector(
+        `.resource-row[data-id="${draggingRowId}"]`,
+      );
+      const targetRow = container.querySelector(
+        `.resource-row[data-id="${targetId}"]`,
+      );
+      if (
+        !draggingRow ||
+        !targetRow ||
+        draggingRow.dataset.kind !== targetRow.dataset.kind
+      )
+        return;
       targetRow.parentNode.insertBefore(draggingRow, targetRow);
       await persistOrderByKind(kind);
       await renderResources();
@@ -806,7 +1021,11 @@ async function renderResources() {
     if (!row) return;
     const resourceId = row.dataset.id;
     if (!resourceId) return;
-    if (e.target.matches('input[data-field="title"], input[data-field="priority"]')) {
+    if (
+      e.target.matches(
+        'input[data-field="title"], input[data-field="priority"]',
+      )
+    ) {
       scheduleAutoSave(resourceId);
     }
   };
@@ -849,7 +1068,8 @@ async function handleLookupTest() {
   }
   output.innerText = "Đang tra...";
   const config = await getConfig();
-  const mode = config.lookupResultMode === "first_match" ? "first_match" : "stacked";
+  const mode =
+    config.lookupResultMode === "first_match" ? "first_match" : "stacked";
   const res = await lookupTermWithFreq(term, { mode, maxDictionaries: 10 });
 
   const freqText =
@@ -923,7 +1143,7 @@ function initDictionaryPanel() {
 
   importBtn.onclick = async () => {
     if (!dictFile.files.length) return alert("Chọn file JSON/ZIP trước.");
-    
+
     const file = dictFile.files[0];
     status.innerText = "🔄 Đang nhập...";
     try {
@@ -941,16 +1161,23 @@ document.addEventListener("DOMContentLoaded", async () => {
   // Chạy các thành phần giao diện
   initTabs();
   initDictionaryPanel();
-  
+
   // Nạp dữ liệu vào các Panel
   // Sư phụ bọc trong try-catch để nếu Anki lỗi thì TTS vẫn load được
-  await setupAnkiPanel().catch(e => console.log("Anki Panel load fail"));
-  await setupAudioPanel().catch(e => console.log("Audio Panel load fail"));
-  await setupDictionaryPanel().catch(e => console.log("Dictionary Panel load fail"));
-  await setupSentencePanel().catch(e => console.log("Sentence Panel load fail"));
-  await setupImagesPanel().catch(e => console.log("Images Panel load fail"));
-  await setupShortcutPanel().catch(e => console.log("Shortcut Panel load fail"));
-  await renderResources().catch(e => console.log("Resource render fail", e));
+  await setupAnkiPanel().catch((e) => console.log("Anki Panel load fail"));
+  await setupAudioPanel().catch((e) => console.log("Audio Panel load fail"));
+  await setupDictionaryPanel().catch((e) =>
+    console.log("Dictionary Panel load fail"),
+  );
+  await setupSentencePanel().catch((e) =>
+    console.log("Sentence Panel load fail"),
+  );
+  await setupImagesPanel().catch((e) => console.log("Images Panel load fail"));
+  await setupOtherDictPanel().catch((e) => console.log("Other Dict Panel load fail"));
+  await setupShortcutPanel().catch((e) =>
+    console.log("Shortcut Panel load fail"),
+  );
+  await renderResources().catch((e) => console.log("Resource render fail", e));
 
   const autoSaveGeneral = debounce(
     () => saveGeneralSettings("dictionarySaveStatus"),
@@ -964,30 +1191,75 @@ document.addEventListener("DOMContentLoaded", async () => {
     () => saveGeneralSettings("imagesSaveStatus"),
     350,
   );
-  const autoSaveAudio = debounce(() => saveGeneralSettings("audioSaveStatus"), 350);
+  const autoSaveAudio = debounce(
+    () => saveGeneralSettings("audioSaveStatus"),
+    350,
+  );
 
-  document.getElementById("lookupMode")?.addEventListener("change", autoSaveGeneral);
-  document.getElementById("lookupResultMode")?.addEventListener("change", autoSaveGeneral);
-  document.getElementById("popupDefaultFeature")?.addEventListener("change", autoSaveGeneral);
+  document
+    .getElementById("lookupMode")
+    ?.addEventListener("change", autoSaveGeneral);
+  document
+    .getElementById("lookupResultMode")
+    ?.addEventListener("change", autoSaveGeneral);
+  document
+    .getElementById("popupDefaultFeature")
+    ?.addEventListener("change", autoSaveGeneral);
 
-  document.getElementById("showSentenceToggle")?.addEventListener("change", autoSaveSentence);
-  document.getElementById("showSentenceTranslationToggle")?.addEventListener("change", autoSaveSentence);
-  document.getElementById("enableTranslate")?.addEventListener("change", autoSaveSentence);
+  document
+    .getElementById("showSentenceToggle")
+    ?.addEventListener("change", autoSaveSentence);
+  document
+    .getElementById("showSentenceTranslationToggle")
+    ?.addEventListener("change", autoSaveSentence);
+  document
+    .getElementById("enableTranslate")
+    ?.addEventListener("change", autoSaveSentence);
 
-  document.getElementById("imageEnabled")?.addEventListener("change", autoSaveImages);
+  document
+    .getElementById("imageEnabled")
+    ?.addEventListener("change", autoSaveImages);
+  document
+    .getElementById("imageMaxLinks")
+    ?.addEventListener("change", autoSaveImages);
+  document
+    .getElementById("imageAutoLoadCount")
+    ?.addEventListener("change", autoSaveImages);
+  document
+    .getElementById("imageRetryLimit")
+    ?.addEventListener("change", autoSaveImages);
 
-  document.getElementById("forvoEnabled")?.addEventListener("change", autoSaveAudio);
-  document.getElementById("forvoMode")?.addEventListener("change", autoSaveAudio);
-  document.getElementById("forvoMaxDisplay")?.addEventListener("change", autoSaveAudio);
-  document.getElementById("forvoAutoplayCount")?.addEventListener("change", autoSaveAudio);
-  document.getElementById("ttsEnabled")?.addEventListener("change", autoSaveAudio);
-  document.getElementById("ttsMaxDisplay")?.addEventListener("change", autoSaveAudio);
-  document.getElementById("ttsAutoplayCount")?.addEventListener("change", autoSaveAudio);
+  document
+    .getElementById("forvoEnabled")
+    ?.addEventListener("change", autoSaveAudio);
+  document
+    .getElementById("forvoMode")
+    ?.addEventListener("change", autoSaveAudio);
+  document
+    .getElementById("forvoMaxDisplay")
+    ?.addEventListener("change", autoSaveAudio);
+  document
+    .getElementById("forvoAutoplayCount")
+    ?.addEventListener("change", autoSaveAudio);
+  document
+    .getElementById("forvoAutoplayOnNavigate")
+    ?.addEventListener("change", autoSaveAudio);
+  document
+    .getElementById("ttsEnabled")
+    ?.addEventListener("change", autoSaveAudio);
+  document
+    .getElementById("ttsMaxDisplay")
+    ?.addEventListener("change", autoSaveAudio);
+  document
+    .getElementById("ttsAutoplayCount")
+    ?.addEventListener("change", autoSaveAudio);
   document.getElementById("voice1")?.addEventListener("change", autoSaveAudio);
   document.getElementById("voice2")?.addEventListener("change", autoSaveAudio);
   document.getElementById("voice3")?.addEventListener("change", autoSaveAudio);
 
-  document.getElementById("ankiSaveBtn")?.addEventListener("click", () => saveAnkiSettings("ankiSaveStatus"));
+  document
+    .getElementById("ankiSaveBtn")
+    ?.addEventListener("click", () => saveAnkiSettings("ankiSaveStatus"));
 
   const btnLookupTest = document.getElementById("lookupTestBtn");
   if (btnLookupTest) btnLookupTest.onclick = () => handleLookupTest();

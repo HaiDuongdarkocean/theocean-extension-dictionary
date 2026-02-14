@@ -23,6 +23,7 @@
           <button class="nav__btn" data-panel="sentencePanel" type="button">Sentence</button>
           <button class="nav__btn" data-panel="imagesPanel" type="button">Images</button>
           <button class="nav__btn" data-panel="audioPanel" type="button">Audio</button>
+          <button class="nav__btn" data-panel="otherDictPanel" type="button">Other Dictionary</button>
         </div>
       </aside>
 
@@ -93,6 +94,7 @@
                       <option value="images">Images</option>
                       <option value="tts">TTS</option>
                       <option value="sentence">Sentence</option>
+                      <option value="other">Other</option>
                       <option value="none">None</option>
                     </select>
                   </div>
@@ -268,6 +270,43 @@
                   </div>
                 </div>
 
+                <div class="row">
+                  <div class="row__label">Max image links</div>
+                  <div class="row__control">
+                    <select id="imageMaxLinks">
+                      <option value="5">5</option>
+                      <option value="10">10</option>
+                      <option value="15">15</option>
+                      <option value="20">20</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div class="row">
+                  <div class="row__label">Auto-load count</div>
+                  <div class="row__control">
+                    <select id="imageAutoLoadCount">
+                      <option value="1">1</option>
+                      <option value="2">2</option>
+                      <option value="3">3</option>
+                      <option value="4">4</option>
+                      <option value="5">5</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div class="row">
+                  <div class="row__label">Retry limit</div>
+                  <div class="row__control">
+                    <select id="imageRetryLimit">
+                      <option value="0">0</option>
+                      <option value="3">3</option>
+                      <option value="5">5</option>
+                      <option value="10">10</option>
+                    </select>
+                  </div>
+                </div>
+
                 <div class="actions">
                   <span class="status" id="imagesSaveStatus"></span>
                 </div>
@@ -331,6 +370,14 @@
                   </div>
                 </div>
                 <p class="hint">Autoplay is capped by the number of buttons shown.</p>
+
+                <div class="row">
+                  <div class="row__label">Autoplay on navigate</div>
+                  <div class="row__control">
+                    <input type="checkbox" id="forvoAutoplayOnNavigate" />
+                    <span>Play when using A / D</span>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -420,6 +467,43 @@
                 <div class="actions">
                   <span class="status" id="ttsTestStatus"></span>
                 </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="otherDictPanel" class="panel">
+          <div class="panel__header">
+            <div>
+              <h1 class="panel__title">Other Dictionary</h1>
+              <p class="panel__desc">Manage external dictionary links with placeholders like {term} and {sentence}.</p>
+            </div>
+          </div>
+
+          <div class="grid">
+            <div class="card">
+              <div class="card__header">
+                <h2 class="card__title">External Dictionaries</h2>
+              </div>
+              <div class="card__body">
+                <div id="otherDictList"></div>
+                <div class="actions">
+                  <button class="btn btn--primary" id="addOtherDictBtn" type="button">Add Dictionary</button>
+                  <span class="status" id="otherDictStatus"></span>
+                </div>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card__header">
+                <h2 class="card__title">Placeholder Guide</h2>
+              </div>
+              <div class="card__body">
+                <p class="hint"><strong>{term}</strong> - The looked-up word</p>
+                <p class="hint"><strong>{sentence}</strong> - The example sentence</p>
+                <p class="hint" style="margin-top:10px;"><strong>Example:</strong></p>
+                <p class="hint">https://dictionary.cambridge.org/dictionary/english/{term}</p>
+                <p class="hint">https://www.oxfordlearnersdictionaries.com/definition/english/{term}</p>
               </div>
             </div>
           </div>

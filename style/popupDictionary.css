@@ -32,26 +32,43 @@
   border: 1px solid var(--yomi-border) !important;
   border-radius: 12px !important;
   box-shadow: var(--yomi-shadow) !important;
-  font-family: 'Roboto', -apple-system, sans-serif !important;
+  font-family:
+    "Roboto",
+    -apple-system,
+    sans-serif !important;
   overflow: hidden !important;
+  max-height: 80vh !important;
   display: flex !important;
   flex-direction: column !important;
   animation: yomiPop 0.2s cubic-bezier(0.2, 0, 0.2, 1);
   pointer-events: auto !important;
   box-sizing: border-box !important;
-  padding-bottom: 14px !important;
 }
 
 @keyframes yomiPop {
-  from { opacity: 0; transform: scale(0.95) translateY(10px); }
-  to { opacity: 1; transform: scale(1) translateY(0); }
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
 }
 
 /* Header kiểu Migaku: Từ vựng nổi bật */
 .yomi-header {
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 10 !important;
   padding: 16px 16px 12px 16px !important;
-  background: linear-gradient(to bottom, var(--yomi-surface), var(--yomi-bg)) !important;
+  background: linear-gradient(
+    to bottom,
+    var(--yomi-surface),
+    var(--yomi-bg)
+  ) !important;
   border-bottom: 1px solid var(--yomi-border) !important;
+  flex-shrink: 0 !important;
 }
 
 .popup-term-title {
@@ -63,16 +80,17 @@
 }
 
 .yomi-pronunciation {
-  font-family: 'Lucida Sans Unicode', sans-serif !important;
+  font-family: "Lucida Sans Unicode", sans-serif !important;
   color: var(--yomi-text-sub) !important;
   font-size: 14px !important;
 }
 
 /* Body: Typography sạch sẽ như YouTube */
 .definition-container {
-  padding: 12px 16px !important;
-  max-height: 280px !important;
+  padding: 12px 16px 14px !important;
   overflow-y: auto !important;
+  overflow-x: hidden !important;
+  flex: 1 1 auto !important;
   font-size: 15px !important;
   line-height: 1.6 !important;
   color: var(--yomi-text-main) !important;
@@ -92,56 +110,58 @@
 }
 
 /* Scrollbar tinh tế */
-.definition-container::-webkit-scrollbar {
+.definition-container::-webkit-scrollbar,
+.yomi-feature-body::-webkit-scrollbar {
   width: 4px !important;
 }
-.definition-container::-webkit-scrollbar-thumb {
+.definition-container::-webkit-scrollbar-thumb,
+.yomi-feature-body::-webkit-scrollbar-thumb {
   background: var(--yomi-border) !important;
   border-radius: 10px !important;
 }
 
 /* 1. Sửa lại Header để chứa được Tag dài */
 .yomi-header {
-    padding: 16px !important;
-    display: flex !important;
-    flex-direction: column !important; /* Đổi sang column để tiêu đề và ghi chú gốc không đè nhau */
-    gap: 4px !important;
+  padding: 16px 16px 4px !important;
+  display: flex !important;
+  flex-direction: column !important; /* Đổi sang column để tiêu đề và ghi chú gốc không đè nhau */
+  gap: 4px !important;
 }
 
 /* 2. Tiêu đề chính */
 .popup-term-title {
-    font-size: 24px !important; /* Tăng độ đậm chất Migaku */
-    line-height: 1.2 !important;
-    color: var(--yomi-primary) !important;
-    word-break: break-word !important;
+  font-size: 24px !important; /* Tăng độ đậm chất Migaku */
+  line-height: 1.2 !important;
+  color: var(--yomi-primary) !important;
+  word-break: break-word !important;
 }
 
 /* 3. Dòng thông tin "Gốc của..." - Nhỏ lại và tinh tế hơn */
 .yomi-origin-note {
-    font-size: 13px !important;
-    color: var(--yomi-text-sub) !important;
-    font-style: italic !important;
-    margin-bottom: 4px !important;
-    display: block !important;
+  font-size: 13px !important;
+  color: var(--yomi-text-sub) !important;
+  font-style: italic !important;
+  margin-bottom: 4px !important;
+  display: block !important;
 }
 
 /* 4. Sửa Tag - Quan trọng nhất */
 .yomi-tag {
-    display: inline-block !important;
-    padding: 2px 8px !important;
-    background: var(--yomi-primary-soft) !important;
-    color: var(--yomi-primary) !important;
-    border-radius: 4px !important;
-    font-size: 10px !important; /* Nhỏ lại cho chuyên nghiệp */
-    font-weight: 700 !important;
-    text-transform: uppercase !important;
-    
-    /* Chống tràn cho tag quá dài */
-    max-width: fit-content !important;
-    white-space: nowrap !important;
-    overflow: hidden !important;
-    text-overflow: ellipsis !important; 
-    border: 1px solid var(--yomi-primary);
+  display: inline-block !important;
+  padding: 2px 8px !important;
+  background: var(--yomi-primary-soft) !important;
+  color: var(--yomi-primary) !important;
+  border-radius: 4px !important;
+  font-size: 10px !important; /* Nhỏ lại cho chuyên nghiệp */
+  font-weight: 700 !important;
+  text-transform: uppercase !important;
+
+  /* Chống tràn cho tag quá dài */
+  max-width: fit-content !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  border: 1px solid var(--yomi-primary);
 }
 
 .ocean-dict-block {
@@ -196,23 +216,26 @@
   min-height: 100px;
 }
 
-.yomi-image-gallery::-webkit-scrollbar {
-  height: 4px;
+.ocean-image-gallery {
+  display: flex;
+  justify-content: center;
+  align-items: center;
 }
 
-.yomi-image-gallery::-webkit-scrollbar-thumb {
-  background: var(--yomi-primary-soft);
-  border-radius: 999px;
+.yomi-thumb-wrap {
+  position: relative;
+  flex: 0 0 auto;
+  border-radius: 10px;
 }
 
 .yomi-thumb {
   width: 90px;
   height: 90px;
   object-fit: cover;
-  border-radius: 8px;
+  border-radius: 10px;
   cursor: pointer;
   border: 2px solid transparent;
-  flex: 0 0 auto;
+  display: block;
 }
 
 .yomi-tts-btn {
@@ -246,10 +269,21 @@
   padding-bottom: 4px;
 }
 
+.beauty-scrollbar::-webkit-scrollbar,
+.yomi-feature-body::-webkit-scrollbar,
+.yomi-tts-list::-webkit-scrollbar,
+.yomi-audio-list::-webkit-scrollbar,
+.yomi-image-gallery::-webkit-scrollbar,
 .yomi-tts-section .yomi-tts-group::-webkit-scrollbar {
   height: 4px;
+  width: 4px;
 }
 
+.beauty-scrollbar::-webkit-scrollbar-thumb,
+.yomi-feature-body::-webkit-scrollbar-thumb,
+.yomi-tts-list::-webkit-scrollbar-thumb,
+.yomi-audio-list::-webkit-scrollbar-thumb,
+.yomi-image-gallery::-webkit-scrollbar-thumb,
 .yomi-tts-section .yomi-tts-group::-webkit-scrollbar-thumb {
   background: var(--yomi-primary-soft);
   border-radius: 999px;
@@ -308,12 +342,22 @@
   background: linear-gradient(135deg, transparent 50%, var(--yomi-border) 50%);
 }
 
-.yomi-thumb.is-focused {
-  border-color: var(--yomi-primary);
+.yomitan-popup-stack .yomi-thumb-wrap.is-focused::after {
+  content: "";
+  position: absolute;
+  inset: 4px;
+  border-radius: 6px;
+  pointer-events: none;
+  box-shadow: 0 0 0 2px var(--yomi-primary) !important;
 }
 
-.yomi-thumb.is-selected {
-  box-shadow: 0 0 0 2px #42b72a inset;
+.yomitan-popup-stack .yomi-thumb-wrap.is-selected::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 10px;
+  pointer-events: none;
+  box-shadow: 0 0 0 2px rgb(66, 183, 42) inset !important;
 }
 
 .yomi-image-controls {
@@ -330,6 +374,9 @@
   padding: 3px 8px;
   font-size: 11px;
   cursor: pointer;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
 }
 
 .yomi-load-more-img {
@@ -384,7 +431,7 @@
 
 .yomi-definition-block.is-focused {
   background: var(--yomi-primary-soft);
-  border-left: 3px solid var(--yomi-primary);
+  border-left: 0px solid var(--yomi-primary);
 }
 
 .yomi-definition-block.is-selected {
@@ -404,9 +451,13 @@
 }
 
 .yomi-feature-shell {
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 9 !important;
   border-top: 1px solid var(--yomi-border);
   border-bottom: 1px solid var(--yomi-border);
   background: var(--yomi-surface);
+  flex-shrink: 0 !important;
 }
 
 .yomi-feature-toolbar {
@@ -416,6 +467,7 @@
   padding: 8px 12px;
   overflow-x: auto;
   border-bottom: 1px solid var(--yomi-border);
+  background: var(--yomi-surface) !important;
 }
 
 .yomi-feature-btn {
@@ -437,8 +489,11 @@
 }
 
 .yomi-feature-body {
-  min-height: 88px;
+  min-height: 133px;
+  max-height: 162px;
   padding: 8px 12px 10px;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
 }
 
 .yomi-feature-body.is-empty {
@@ -468,6 +523,50 @@
   overflow-y: auto;
   overflow-x: hidden;
   padding-right: 2px;
+}
+
+.yomi-forvo-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.yomi-forvo-head > span {
+  font-size: 11px;
+  color: var(--yomi-text-sub);
+  font-weight: 700;
+}
+
+.yomi-forvo-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.yomi-forvo-actions .yomi-forvo-play,
+.yomi-forvo-actions .yomi-forvo-play-all,
+.yomi-forvo-more-row .yomi-forvo-more {
+  border: 1px solid var(--yomi-border);
+  background: var(--yomi-surface);
+  color: var(--yomi-text-main);
+  border-radius: 8px;
+  padding: 4px 8px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.yomi-forvo-actions .yomi-forvo-play,
+.yomi-forvo-actions .yomi-forvo-play-all {
+  border-color: var(--yomi-primary);
+  background: var(--yomi-primary-soft);
+  color: var(--yomi-primary);
+}
+
+.yomi-forvo-more-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 6px;
 }
 
 .yomi-audio-item {
@@ -505,8 +604,9 @@
   flex: 1 1 auto;
   cursor: pointer;
   display: flex;
-  flex-direction: column;
   gap: 2px;
+  flex-direction: row;
+  align-items: center;
 }
 
 .yomi-audio-name {
@@ -518,6 +618,9 @@
 .yomi-audio-region {
   font-size: 11px;
   color: var(--yomi-text-sub);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
 }
 
 .yomi-audio-item.is-focused {
@@ -627,6 +730,16 @@
   font-size: 12px;
   line-height: 1.45;
   color: var(--yomi-text-sub);
+}
+
+/* ===== Other dictionaries section ===== */
+.yomi-other-section {
+  padding: 2px 2px 4px;
+}
+
+.yomi-other-list a:hover {
+  background: var(--yomi-primary-soft) !important;
+  border-color: var(--yomi-primary) !important;
 }
 
 /* ===== Image section ===== */

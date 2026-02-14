@@ -538,7 +538,15 @@ select,
   flex-wrap: wrap;
 }
 
+.tts-tester .tts-flex-row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
 .tts-tester .tts-flex-row .row__control {
+  display: flex;
+  flex-direction: column;
   width: 100%;
 }
 
@@ -554,7 +562,7 @@ select,
 
 .tts-tester .voice-item {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-start;
   align-items: center;
   padding: 6px 8px;
   border: 1px solid var(--border);
@@ -606,6 +614,43 @@ select,
 
 .resource-row.is-dragging {
   opacity: 0.55;
+}
+
+.btn.voice-play-btn {
+  background: var(--surface);
+}
+
+textarea {
+  background: var(--surface-2);
+  color: var(--text);
+  border-radius: 16px;
+  padding: 15px 20px;
+  font-size: 14px;
+  outline: none;
+  transition: all 0.3s ease;
+  width: 100%;
+  /* resize: none; */
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+textarea:focus {
+  border: 1px solid var(--primary);
+  box-shadow: 0 0 5px var(--primary);
+}
+
+textarea::placeholder {
+  color: var(--text);
+}
+
+textarea::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+  display: none;
+}
+
+textarea::-webkit-scrollbar-thumb {
+  background: var(--primary);
 }
 
 @media (max-width: 860px) {

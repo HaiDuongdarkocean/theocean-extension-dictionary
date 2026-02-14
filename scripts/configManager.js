@@ -24,11 +24,14 @@ const DEFAULT_CONFIG = {
         enabled: true,
         mode: "auto", // "auto" | "manual"
         maxDisplay: 3,
-        autoplayCount: 1
+        autoplayCount: 1,
+        autoplayOnNavigate: false
     },
     image: {
         enabled: true,
-        autoLoadCount: 3
+        autoLoadCount: 3,
+        maxLinks: 20,
+        retryLimit: 5
     },
     popup: {
         defaultFeature: "forvo" // "forvo" | "images" | "tts" | "sentence" | "none"
