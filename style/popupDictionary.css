@@ -488,6 +488,16 @@
   background: var(--yomi-primary-soft);
 }
 
+.yomi-feature-btn[data-feature="none"] {
+  margin-left: auto;
+  border-style: dashed;
+  opacity: 0.7;
+}
+
+.yomi-feature-btn[data-feature="none"]:hover {
+  opacity: 1;
+}
+
 .yomi-feature-body {
   min-height: 133px;
   max-height: 162px;

@@ -148,17 +148,26 @@ function renderFeatureToolbar(popup) {
     other: "Other",
   };
 
-  toolbar.innerHTML = popup._availableFeatures
+  const buttons = popup._availableFeatures
     .map(
       (feature) =>
         `<button class="yomi-feature-btn" type="button" data-feature="${feature}">${labels[feature] || feature}</button>`,
     )
     .join("");
 
+  // Add "None" button to close all tabs
+  const noneButton = `<button class="yomi-feature-btn" type="button" data-feature="none" title="Close tabs">None</button>`;
+
+  toolbar.innerHTML = buttons + noneButton;
+
   toolbar.querySelectorAll(".yomi-feature-btn").forEach((button) => {
     button.addEventListener("click", () => {
       const feature = button.getAttribute("data-feature");
-      setActiveFeature(popup, feature);
+      if (feature === "none") {
+        setActiveFeature(popup, null);
+      } else {
+        setActiveFeature(popup, feature);
+      }
     });
   });
 }
@@ -180,8 +189,6 @@ function setActiveFeature(popup, feature) {
   const body = popup.querySelector(".yomi-feature-body");
   if (body) {
     body.classList.toggle("is-empty", !feature);
-    // When switching features (or shortcut-triggered navigation), always show the feature content from the top.
-    // This keeps the feature UI consistent even if user previously scrolled inside the feature-body.
     body.scrollTop = 0;
   }
 
@@ -189,6 +196,17 @@ function setActiveFeature(popup, feature) {
   const featureShell = popup.querySelector(".yomi-feature-shell");
   if (featureShell && feature) {
     featureShell.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+}
+
+function closeFeatureTab(popup) {
+  // Close current feature tab to show definition
+  setActiveFeature(popup, null);
+  
+  // Scroll definition into view
+  const defContainer = popup.querySelector(".definition-container");
+  if (defContainer) {
+    defContainer.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 }
 
@@ -935,104 +953,181 @@ function handlePopupShortcutKeydown(event) {
   event.preventDefault();
   event.stopPropagation();
   event.stopImmediatePropagation();
-  activateFeatureForAction(activePopup, action);
 
-  if (action === "defPrev") moveDefinitionFocus(activePopup, -1);
-  if (action === "defNext") moveDefinitionFocus(activePopup, 1);
-  if (action === "defToggle") toggleFocusedDefinitionSelection(activePopup);
-  if (action === "imageNext") moveImageFocus(activePopup, 1);
-  if (action === "imagePrev") moveImageFocus(activePopup, -1);
-  if (action === "imageSelect") toggleFocusedImageSelection(activePopup);
+  // Definition shortcuts (Z, X, C) -> close feature tab and show definition
+  if (["defPrev", "defNext", "defToggle"].includes(action)) {
+    closeFeatureTab(activePopup);
+    if (action === "defPrev") moveDefinitionFocus(activePopup, -1);
+    if (action === "defNext") moveDefinitionFocus(activePopup, 1);
+    if (action === "defToggle") toggleFocusedDefinitionSelection(activePopup);
+    return;
+  }
+
+  // Image shortcuts (Q, E, W)
+  if (action === "imageNext") {
+    const wasTabClosed = activePopup._activeFeature !== "images";
+    setActiveFeature(activePopup, "images");
+    moveImageFocus(activePopup, 1);
+    return;
+  }
+  if (action === "imagePrev") {
+    const wasTabClosed = activePopup._activeFeature !== "images";
+    setActiveFeature(activePopup, "images");
+    moveImageFocus(activePopup, -1);
+    return;
+  }
+  if (action === "imageSelect") {
+    setActiveFeature(activePopup, "images");
+    toggleFocusedImageSelection(activePopup);
+    return;
+  }
+
+  // Audio/Forvo shortcuts (A, D, S, F)
   if (action === "audioNext") {
     if (activePopup._availableFeatures?.includes("forvo")) {
-      if (activePopup._activeFeature !== "forvo") {
-        setActiveFeature(activePopup, "forvo");
+      const wasTabClosed = activePopup._activeFeature !== "forvo";
+      setActiveFeature(activePopup, "forvo");
+      
+      if (wasTabClosed) {
+        // Tab was just opened - initialize focus and optionally autoplay
         activePopup._state.focusedAudioIndex = 0;
         activePopup._audioWindowStart = 0;
         if ((activePopup._audioFullList?.length || 0) > 0) {
           renderAudioGroup(activePopup);
+          if (activePopup._audioAutoPlayOnNavigate) {
+            playAudioWithUI(activePopup, 0);
+          }
         }
-        if (activePopup._audioAutoPlayOnNavigate) {
-          playAudioWithUI(activePopup, activePopup._state.focusedAudioIndex);
-        }
-        return;
-      }
-      if (activePopup._audioAutoPlayOnNavigate) {
-        playAudioWithUI(activePopup, activePopup._state.focusedAudioIndex);
+      } else {
+        // Tab was already open - just navigate
+        moveAudioFocus(activePopup, 1);
       }
     }
-    moveAudioFocus(activePopup, 1);
+    return;
   }
+
   if (action === "audioPrev") {
     if (activePopup._availableFeatures?.includes("forvo")) {
-      if (activePopup._activeFeature !== "forvo") {
-        setActiveFeature(activePopup, "forvo");
+      const wasTabClosed = activePopup._activeFeature !== "forvo";
+      setActiveFeature(activePopup, "forvo");
+      
+      if (wasTabClosed) {
         activePopup._state.focusedAudioIndex = 0;
         activePopup._audioWindowStart = 0;
         if ((activePopup._audioFullList?.length || 0) > 0) {
           renderAudioGroup(activePopup);
+          if (activePopup._audioAutoPlayOnNavigate) {
+            playAudioWithUI(activePopup, 0);
+          }
         }
-        if (activePopup._audioAutoPlayOnNavigate) {
-          playAudioWithUI(activePopup, activePopup._state.focusedAudioIndex);
-        }
-        return;
-      }
-      if (activePopup._audioAutoPlayOnNavigate) {
-        playAudioWithUI(activePopup, activePopup._state.focusedAudioIndex);
+      } else {
+        moveAudioFocus(activePopup, -1);
       }
     }
-    moveAudioFocus(activePopup, -1);
+    return;
   }
-  if (action === "audioSelect") toggleFocusedAudioSelection(activePopup);
+
+  if (action === "audioSelect") {
+    setActiveFeature(activePopup, "forvo");
+    toggleFocusedAudioSelection(activePopup);
+    return;
+  }
+
   if (action === "audioPlay") {
+    setActiveFeature(activePopup, "forvo");
     const focus = activePopup?._state?.focusedAudioIndex ?? 0;
     playAudioWithUI(activePopup, focus);
+    return;
   }
+
+  // TTS shortcuts (G, J, H, K)
   if (action === "ttsNext") {
-    if (activePopup._availableFeatures?.includes("tts") && activePopup._activeFeature !== "tts") {
+    if (activePopup._availableFeatures?.includes("tts")) {
+      const wasTabClosed = activePopup._activeFeature !== "tts";
       setActiveFeature(activePopup, "tts");
-      activePopup._ttsFocused = 0;
-      applyTtsFocus(activePopup);
-      return;
+      
+      if (wasTabClosed) {
+        // Tab was just opened - initialize focus and optionally autoplay
+        activePopup._ttsFocused = 0;
+        applyTtsFocus(activePopup);
+        if (activePopup._ttsVoices?.length > 0 && activePopup._ttsAutoPlayOnNavigate) {
+          const voice = activePopup._ttsVoices[0];
+          const sentenceText = activePopup._cardData?.sentence || activePopup._cardData?.term || "";
+          playTtsSentence(sentenceText, voice?.voiceName || "");
+        }
+      } else {
+        // Tab was already open - just navigate
+        moveTtsFocus(activePopup, 1);
+      }
     }
-    moveTtsFocus(activePopup, 1);
+    return;
   }
+
   if (action === "ttsPrev") {
-    if (activePopup._availableFeatures?.includes("tts") && activePopup._activeFeature !== "tts") {
+    if (activePopup._availableFeatures?.includes("tts")) {
+      const wasTabClosed = activePopup._activeFeature !== "tts";
       setActiveFeature(activePopup, "tts");
-      activePopup._ttsFocused = 0;
-      applyTtsFocus(activePopup);
-      return;
+      
+      if (wasTabClosed) {
+        activePopup._ttsFocused = 0;
+        applyTtsFocus(activePopup);
+        if (activePopup._ttsVoices?.length > 0 && activePopup._ttsAutoPlayOnNavigate) {
+          const voice = activePopup._ttsVoices[0];
+          const sentenceText = activePopup._cardData?.sentence || activePopup._cardData?.term || "";
+          playTtsSentence(sentenceText, voice?.voiceName || "");
+        }
+      } else {
+        moveTtsFocus(activePopup, -1);
+      }
     }
-    moveTtsFocus(activePopup, -1);
+    return;
   }
+
   if (action === "ttsSelect") {
-    if (activePopup._availableFeatures?.includes("tts") && activePopup._activeFeature !== "tts") {
-      setActiveFeature(activePopup, "tts");
-      activePopup._ttsFocused = 0;
-      applyTtsFocus(activePopup);
-      return;
-    }
+    setActiveFeature(activePopup, "tts");
     toggleFocusedTtsSelection(activePopup);
+    return;
   }
+
   if (action === "ttsPlay") {
+    setActiveFeature(activePopup, "tts");
     const sentenceText = activePopup._cardData?.sentence || activePopup._cardData?.term || "";
     const ttsVoices = Array.isArray(activePopup._ttsVoices) ? activePopup._ttsVoices : [];
     const focus = Number(activePopup._ttsFocused || 0);
     const voice = ttsVoices[Math.max(0, Math.min(ttsVoices.length - 1, focus))];
     playTtsSentence(sentenceText, voice?.voiceName || "");
+    return;
   }
+
+  // Other dictionaries shortcut (V)
+  if (action === "showOther") {
+    setActiveFeature(activePopup, "other");
+    return;
+  }
+
+  // Sentence shortcut (B)
+  if (action === "showSentence") {
+    setActiveFeature(activePopup, "sentence");
+    return;
+  }
+
+  // Anki shortcuts
   if (action === "viewBrowser") {
     const viewBtn = activePopup.querySelector(".yomi-view-browser-btn");
     if (viewBtn) viewBtn.click();
+    return;
   }
+
   if (action === "updateCard") {
     const updateBtn = activePopup.querySelector(".yomi-update-anki-btn");
     if (updateBtn) updateBtn.click();
+    return;
   }
+
   if (action === "addToAnki") {
     const payload = buildAnkiPayload(activePopup._cardData || {}, activePopup);
     addNoteToAnki(payload, activePopup);
+    return;
   }
 }
 
@@ -1163,6 +1258,7 @@ async function showPopup(x, y, data, level) {
   newPopup._availableFeatures = featureState.available.slice();
   newPopup._activeFeature = featureState.initial;
   newPopup._audioAutoPlayOnNavigate = popupCfg?.forvo?.autoplayOnNavigate === true;
+  newPopup._ttsAutoPlayOnNavigate = (popupCfg?.tts?.autoplayCount || 0) > 0;
   newPopup._state.selectedTts = new Set();
   const savedSize = await loadPopupSize();
   const sentenceHtml = featureState.sentenceVisible
