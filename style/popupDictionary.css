@@ -339,7 +339,7 @@
   right: 2px;
   bottom: 2px;
   cursor: se-resize;
-  background: linear-gradient(135deg, transparent 50%, var(--yomi-border) 50%);
+  background: linear-gradient(135deg, transparent 50%, var(--yomi-border) 100%);
 }
 
 .yomitan-popup-stack .yomi-thumb-wrap.is-focused::after {
@@ -499,8 +499,8 @@
 }
 
 .yomi-feature-body {
-  min-height: 133px;
-  max-height: 162px;
+  /* min-height: 133px;
+  max-height: 162px; */
   padding: 8px 12px 10px;
   overflow-y: auto !important;
   overflow-x: hidden !important;

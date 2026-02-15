@@ -11,6 +11,8 @@ let lookupMode = "hover";
 let activePopup = null;
 let shortcutConfig = null;
 let shortcutReady = false;
+let lastEscTime = 0;
+const ESC_DOUBLE_CLICK_THRESHOLD = 300;
 const ShortcutUtils = window.ShortcutUtils;
 const POPUP_SIZE_KEY = "oceanPopupSize";
 const POPUP_FEATURES = ["forvo", "images", "tts", "sentence", "other"];
@@ -250,10 +252,16 @@ async function playTtsSentence(text, overrideVoiceName = "") {
     (ttsCfg.voices || []).find((v) => v) ||
     ttsCfg.preferredLang ||
     undefined;
-  chrome.runtime.sendMessage({
-    action: "speakLocal",
-    text,
-    voiceName,
+  
+  // For sequential playback, wait for TTS to complete
+  return new Promise((resolve) => {
+    chrome.runtime.sendMessage({
+      action: "speakLocal",
+      text,
+      voiceName,
+    });
+    // Wait for TTS to complete (adjust timeout as needed)
+    setTimeout(resolve, 2000);
   });
 }
 
@@ -340,6 +348,8 @@ function removePopupsAbove(level) {
   while (popupStack.length > level) {
     let p = popupStack.pop();
     if (p) {
+      // Stop all audio before removing popup
+      stopAllAudios(p);
       p.remove();
       if (activePopup === p) {
         activePopup = popupStack[popupStack.length - 1] || null;
@@ -352,15 +362,65 @@ function playAudioByIndex(popup, index) {
   playAudioWithUI(popup, index);
 }
 
-async function playMultipleAudios(popup, count) {
-  const fullList = popup._audioFullList || [];
-  const max = Math.min(count, fullList.length);
-
+async function playAudioSequentially(popup, indices) {
+  if (!indices || indices.length === 0) return;
+  
   stopAllAudios(popup);
+  popup._isPlayingSequence = true;
+  popup._audioQueue = indices.slice();
 
-  for (let i = 0; i < max; i++) {
-    await playAudioWithUI(popup, i);
+  for (const index of indices) {
+    if (!popup._isPlayingSequence) break; // Stop if user cancelled
+    
+    const fullList = popup._audioFullList || [];
+    const item = fullList[index];
+    
+    if (!item) continue;
+
+    // Handle TTS voice
+    if (!item.url && item.ttsVoiceName) {
+      // Use sentence text if available (from TTS tab), otherwise use sentence or term from cardData
+      const text = popup._ttsSentence || popup?._cardData?.sentence || popup?._cardData?.term || "";
+      if (text) {
+        await new Promise((resolve) => {
+          chrome.runtime.sendMessage({
+            action: "speakLocal",
+            text,
+            voiceName: item.ttsVoiceName,
+          });
+          // Wait for TTS to complete (adjust timeout as needed)
+          setTimeout(resolve, 2000);
+        });
+      }
+      continue;
+    }
+
+    // Handle audio file (Forvo)
+    const row = popup.querySelector(`.yomi-audio-item[data-index="${index}"]`);
+    const playBtn = row?.querySelector(".yomi-audio-play");
+    
+    if (!item.url) continue;
+
+    const audio = new Audio(item.url);
+    popup._currentAudios = [audio];
+    popup._currentPlayingAudio = audio;
+    if (playBtn) playBtn.classList.add("is-playing");
+
+    try {
+      await audio.play();
+      await new Promise((resolve) => {
+        audio.onended = resolve;
+      });
+    } catch (err) {
+      console.error("Audio playback error:", err);
+    }
+
+    if (playBtn) playBtn.classList.remove("is-playing");
+    popup._currentPlayingAudio = null;
   }
+
+  popup._isPlayingSequence = false;
+  popup._audioQueue = [];
 }
 
 function renderAudioGroup(popup) {
@@ -472,6 +532,9 @@ function stopAllAudios(popup) {
   });
 
   popup._currentAudios = [];
+  popup._isPlayingSequence = false;
+  popup._audioQueue = [];
+  popup._currentPlayingAudio = null;
 }
 
 async function playAudioWithUI(popup, index) {
@@ -483,17 +546,18 @@ async function playAudioWithUI(popup, index) {
   const item = fullList[index];
   if (!item) return;
 
+  // Stop all other audios when clicking a specific one
+  stopAllAudios(popup);
+
   if (!item.url && item.ttsVoiceName) {
-    const text = popup?._cardData?.term || "";
+    const text = popup?._cardData?.sentence || popup?._cardData?.term || "";
     if (text) playTtsSentence(text, item.ttsVoiceName);
     return;
   }
 
-  // 🛑 Dừng audio cũ
-  stopAllAudios(popup);
-
   const audio = new Audio(item.url);
   popup._currentAudios = [audio];
+  popup._currentPlayingAudio = audio;
   if (playBtn) playBtn.classList.add("is-playing");
 
   try {
@@ -505,6 +569,7 @@ async function playAudioWithUI(popup, index) {
   } catch {}
 
   if (playBtn) playBtn.classList.remove("is-playing");
+  popup._currentPlayingAudio = null;
 }
 
 function parseDefinitionBlocks(data) {
@@ -617,6 +682,7 @@ function renderPopupTtsGroup(popup, sentence, ttsCfg) {
   popup._ttsVoices = visibleVoices;
   popup._ttsFocused = 0;
   popup._state.selectedTts = popup._state.selectedTts || new Set();
+  popup._ttsSentence = sentence;
 
   container.innerHTML = visibleVoices
     .map((voice, index) => {
@@ -636,10 +702,24 @@ function renderPopupTtsGroup(popup, sentence, ttsCfg) {
 
   const playAllBtn = section.querySelector(".yomi-tts-play-all");
   if (playAllBtn) {
-    playAllBtn.onclick = () => {
-      visibleVoices.forEach((voice, idx) => {
-        setTimeout(() => playTtsSentence(sentence, voice.voiceName), idx * 350);
-      });
+    playAllBtn.onclick = async () => {
+      if (popup._isPlayingSequence) {
+        // Stop playback
+        stopAllAudios(popup);
+        playAllBtn.textContent = "Play all audios";
+      } else {
+        // Start sequential playback of TTS voices
+        playAllBtn.textContent = "Stop audios";
+        popup._isPlayingSequence = true;
+        
+        for (const voice of visibleVoices) {
+          if (!popup._isPlayingSequence) break;
+          await playTtsSentence(sentence, voice.voiceName);
+        }
+        
+        popup._isPlayingSequence = false;
+        playAllBtn.textContent = "Play all audios";
+      }
     };
   }
 
@@ -648,7 +728,7 @@ function renderPopupTtsGroup(popup, sentence, ttsCfg) {
       const idx = Number(btn.getAttribute("data-index"));
       popup._ttsFocused = Number.isNaN(idx) ? 0 : idx;
       const voice = visibleVoices[popup._ttsFocused];
-       applyTtsFocus(popup);
+      applyTtsFocus(popup);
       if (voice) playTtsSentence(sentence, voice.voiceName);
     };
   });
@@ -944,6 +1024,34 @@ function buildAnkiPayload(dataOfCard, popup) {
 
 function handlePopupShortcutKeydown(event) {
   if (!activePopup || !ShortcutUtils) return;
+  
+  // Handle ESC key separately
+  if (event.code === "Escape") {
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation();
+    
+    const now = Date.now();
+    if (now - lastEscTime < ESC_DOUBLE_CLICK_THRESHOLD) {
+      // Double ESC - close all popups
+      removePopupsAbove(0);
+      lastEscTime = 0;
+    } else {
+      // Single ESC - close topmost popup
+      if (popupStack.length > 0) {
+        const topPopup = popupStack[popupStack.length - 1];
+        if (topPopup) {
+          stopAllAudios(topPopup);
+          topPopup.remove();
+          popupStack.pop();
+          activePopup = popupStack[popupStack.length - 1] || null;
+        }
+      }
+      lastEscTime = now;
+    }
+    return;
+  }
+  
   const action = Object.keys(ShortcutUtils.ACTION_LABELS).find((key) => {
     const shortcut = getShortcut(key);
     return shortcut && ShortcutUtils.shortcutEquals(event, shortcut);
@@ -967,18 +1075,25 @@ function handlePopupShortcutKeydown(event) {
   if (action === "imageNext") {
     const wasTabClosed = activePopup._activeFeature !== "images";
     setActiveFeature(activePopup, "images");
-    moveImageFocus(activePopup, 1);
+    if (!wasTabClosed) {
+      moveImageFocus(activePopup, 1);
+    }
     return;
   }
   if (action === "imagePrev") {
     const wasTabClosed = activePopup._activeFeature !== "images";
     setActiveFeature(activePopup, "images");
-    moveImageFocus(activePopup, -1);
+    if (!wasTabClosed) {
+      moveImageFocus(activePopup, -1);
+    }
     return;
   }
   if (action === "imageSelect") {
+    const wasTabClosed = activePopup._activeFeature !== "images";
     setActiveFeature(activePopup, "images");
-    toggleFocusedImageSelection(activePopup);
+    if (!wasTabClosed) {
+      toggleFocusedImageSelection(activePopup);
+    }
     return;
   }
 
@@ -989,7 +1104,6 @@ function handlePopupShortcutKeydown(event) {
       setActiveFeature(activePopup, "forvo");
       
       if (wasTabClosed) {
-        // Tab was just opened - initialize focus and optionally autoplay
         activePopup._state.focusedAudioIndex = 0;
         activePopup._audioWindowStart = 0;
         if ((activePopup._audioFullList?.length || 0) > 0) {
@@ -999,7 +1113,6 @@ function handlePopupShortcutKeydown(event) {
           }
         }
       } else {
-        // Tab was already open - just navigate
         moveAudioFocus(activePopup, 1);
       }
     }
@@ -1047,7 +1160,6 @@ function handlePopupShortcutKeydown(event) {
       setActiveFeature(activePopup, "tts");
       
       if (wasTabClosed) {
-        // Tab was just opened - initialize focus and optionally autoplay
         activePopup._ttsFocused = 0;
         applyTtsFocus(activePopup);
         if (activePopup._ttsVoices?.length > 0 && activePopup._ttsAutoPlayOnNavigate) {
@@ -1056,7 +1168,6 @@ function handlePopupShortcutKeydown(event) {
           playTtsSentence(sentenceText, voice?.voiceName || "");
         }
       } else {
-        // Tab was already open - just navigate
         moveTtsFocus(activePopup, 1);
       }
     }
@@ -1378,10 +1489,20 @@ async function showPopup(x, y, data, level) {
     };
   }
   if (playAllBtn) {
-    playAllBtn.onclick = () => {
-      const total = newPopup._audioFullList?.length || 0;
-      const count = Math.min(3, total);
-      if (count > 0) playMultipleAudios(newPopup, count);
+    playAllBtn.onclick = async () => {
+      if (newPopup._isPlayingSequence) {
+        // Stop playback
+        stopAllAudios(newPopup);
+        playAllBtn.textContent = "Play all";
+      } else {
+        // Start sequential playback
+        playAllBtn.textContent = "Stop";
+        const total = newPopup._audioFullList?.length || 0;
+        const count = Math.min(3, total);
+        const indices = Array.from({ length: count }, (_, i) => i);
+        await playAudioSequentially(newPopup, indices);
+        playAllBtn.textContent = "Play all";
+      }
     };
   }
   if (moreBtn) {

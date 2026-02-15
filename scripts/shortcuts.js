@@ -21,6 +21,7 @@
     ttsPlay: "Play focused TTS",
     showOther: "Show other dictionaries",
     showSentence: "Show sentence",
+    closePopup: "Close popup / Close all",
   };
 
   const DEFAULT_SHORTCUTS = {
@@ -43,6 +44,7 @@
     ttsPlay: { code: "KeyK", shift: false, ctrl: false, alt: false, meta: false },
     showOther: { code: "KeyV", shift: false, ctrl: false, alt: false, meta: false },
     showSentence: { code: "KeyB", shift: false, ctrl: false, alt: false, meta: false },
+    closePopup: { code: "Escape", shift: false, ctrl: false, alt: false, meta: false },
   };
 
   function normalizeShortcut(raw, fallback) {
