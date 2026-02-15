@@ -81,6 +81,58 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true;
   }
 
+  // Get note info (for displaying note details)
+  if (request.action === "getNotesInfo") {
+    const noteIds = request.noteIds || [];
+    if (!Array.isArray(noteIds) || noteIds.length === 0) {
+      sendResponse({ success: false, notes: [] });
+      return;
+    }
+    
+    ankiInvoke("notesInfo", { notes: noteIds })
+      .then(async (res) => {
+        console.log("getNotesInfo raw response:", res);
+        if (res.error) {
+          sendResponse({ success: false, error: res.error, notes: [] });
+        } else {
+          const notesData = res.result || [];
+          console.log("notesData:", notesData);
+          
+          // Get deck names for each card
+          const notes = await Promise.all(notesData.map(async (note) => {
+            let deckName = "Unknown";
+            
+            // Get deck name from first card
+            if (note.cards && note.cards.length > 0) {
+              const cardId = note.cards[0];
+              try {
+                const cardInfo = await ankiInvoke("cardsInfo", { cards: [cardId] });
+                if (cardInfo.result && cardInfo.result[0]) {
+                  deckName = cardInfo.result[0].deckName || "Unknown";
+                }
+              } catch (err) {
+                console.error("Error getting card info:", err);
+              }
+            }
+            
+            return {
+              noteId: note.noteId,
+              deckName: deckName,
+              created: note.mod ? new Date(note.mod * 1000).toLocaleDateString() : "Unknown"
+            };
+          }));
+          
+          console.log("Processed notes:", notes);
+          sendResponse({ success: true, notes });
+        }
+      })
+      .catch((err) => {
+        console.error("getNotesInfo error:", err);
+        sendResponse({ success: false, error: err.message, notes: [] });
+      });
+    return true;
+  }
+
   if (request.action === "search_word") {
     getConfig()
       .then((cfg) => cfg || {})

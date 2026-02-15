@@ -159,6 +159,15 @@
   flex: 1 1 auto !important;
 }
 
+.yomi-feedback-message[style*="cursor: pointer"] {
+  color: var(--yomi-primary) !important;
+  font-weight: 600 !important;
+}
+
+.yomi-feedback-message[style*="cursor: pointer"]:hover {
+  opacity: 0.8 !important;
+}
+
 .yomi-feedback-link {
   color: var(--yomi-primary) !important;
   text-decoration: underline !important;
@@ -856,3 +865,193 @@
 .yomi-image-section .yomi-image-controls {
   margin-top: 6px;
 }
+
+/* ===== Note Selection Modal ===== */
+.yomi-modal-backdrop {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+  animation: yomiBackdropFadeIn 0.2s ease;
+}
+
+@keyframes yomiBackdropFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.yomi-modal-container {
+  background: var(--yomi-bg);
+  border: 1px solid var(--yomi-border);
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  max-width: 90%;
+  max-height: 80%;
+  display: flex;
+  flex-direction: column;
+  animation: yomiModalSlideIn 0.2s ease;
+}
+
+@keyframes yomiModalSlideIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.yomi-modal-header {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--yomi-border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.yomi-modal-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--yomi-text-main);
+}
+
+.yomi-modal-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.yomi-modal-body {
+  padding: 12px 16px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  max-height: 50vh;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.yomi-modal-body::-webkit-scrollbar {
+  width: 6px;
+}
+
+.yomi-modal-body::-webkit-scrollbar-thumb {
+  background: var(--yomi-border);
+  border-radius: 10px;
+}
+
+.yomi-note-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  background: var(--yomi-surface);
+  border: 1px solid var(--yomi-border);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.yomi-note-item:hover {
+  background: var(--yomi-primary-soft);
+  border-color: var(--yomi-primary);
+}
+
+.yomi-note-checkbox {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: var(--yomi-primary);
+}
+
+.yomi-note-info {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.yomi-note-id {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--yomi-text-main);
+  font-family: monospace;
+}
+
+.yomi-note-deck {
+  font-size: 11px;
+  color: var(--yomi-text-sub);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.yomi-note-date {
+  font-size: 10px;
+  color: var(--yomi-text-sub);
+  font-style: italic;
+}
+
+.yomi-modal-footer {
+  padding: 12px 16px;
+  border-top: 1px solid var(--yomi-border);
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.yomi-modal-btn {
+  border: 1px solid var(--yomi-border);
+  background: var(--yomi-surface);
+  color: var(--yomi-text-main);
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.yomi-modal-btn:hover:not(:disabled) {
+  filter: brightness(0.95);
+}
+
+.yomi-modal-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.yomi-select-all-btn,
+.yomi-clear-all-btn {
+  font-size: 11px;
+  padding: 4px 8px;
+}
+
+.yomi-modal-confirm {
+  border-color: var(--yomi-primary);
+  background: var(--yomi-primary);
+  color: white;
+}
+
+.yomi-modal-cancel {
+  border-color: var(--yomi-border);
+}
+
