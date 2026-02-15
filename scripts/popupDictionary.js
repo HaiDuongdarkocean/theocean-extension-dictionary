@@ -104,6 +104,108 @@ function escapeHtml(value) {
     .replace(/'/g, "&#39;");
 }
 
+// Feedback Bar Functions
+function showFeedback(popup, message, type = "info") {
+  if (!popup) return;
+  const feedbackBar = popup.querySelector(".yomi-feedback-bar");
+  if (!feedbackBar) return;
+  
+  feedbackBar.innerHTML = `
+    <div class="yomi-feedback-content yomi-feedback-${type}">
+      <span class="yomi-feedback-message">${escapeHtml(message)}</span>
+    </div>
+  `;
+  
+  feedbackBar.classList.add("is-visible");
+  
+  if (type === "error") {
+    setTimeout(() => dismissFeedback(popup), 5000);
+  }
+}
+
+function showViewLink(popup, noteIds) {
+  if (!popup || !noteIds || noteIds.length === 0) return;
+  const feedbackBar = popup.querySelector(".yomi-feedback-bar");
+  if (!feedbackBar) return;
+  
+  const content = feedbackBar.querySelector(".yomi-feedback-content");
+  if (!content) return;
+  
+  const link = document.createElement("a");
+  link.href = "#";
+  link.className = "yomi-feedback-link";
+  link.textContent = "View";
+  link.onclick = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const query = Array.isArray(noteIds) && noteIds.length > 0
+      ? noteIds.map((id) => `nid:${id}`).join(" OR ")
+      : "";
+    chrome.runtime.sendMessage({
+      action: "guiBrowse",
+      query: query
+    });
+  };
+  
+  content.appendChild(link);
+}
+
+function dismissFeedback(popup) {
+  if (!popup) return;
+  const feedbackBar = popup.querySelector(".yomi-feedback-bar");
+  if (!feedbackBar) return;
+  
+  feedbackBar.innerHTML = "";
+  feedbackBar.classList.remove("is-visible");
+}
+
+async function checkAnkiConnection() {
+  try {
+    const response = await runtimeMessageWithTimeout({
+      action: "checkAnkiConnection"
+    }, 2000);
+    return response?.connected === true;
+  } catch (err) {
+    console.error("Anki connection check failed:", err);
+    return false;
+  }
+}
+
+async function autoCheckAnkiOnOpen(popup, data, ankiConfig) {
+  if (!popup || !data) return { shouldShowAddButton: true, shouldEnableAddButton: true };
+
+  // Check if allowDuplicate is enabled
+  const allowDuplicate = ankiConfig?.allowDuplicate !== false;
+
+  // If allowDuplicate is true, always show and enable Add button
+  if (allowDuplicate) {
+    return { shouldShowAddButton: true, shouldEnableAddButton: true };
+  }
+
+  // If allowDuplicate is false, check if note exists
+  try {
+    const response = await runtimeMessageWithTimeout({
+      action: "checkNoteExists",
+      word: data.term
+    }, 2000);
+
+    if (response?.exists && response?.noteIds) {
+      // Note exists - show feedback and View link, but disable Add button
+      showFeedback(popup, `Note already in Anki`, "info");
+      showViewLink(popup, response.noteIds);
+      popup._ankiNoteIds = response.noteIds;
+      return { shouldShowAddButton: true, shouldEnableAddButton: false };
+    }
+
+    // Note doesn't exist - enable Add button
+    return { shouldShowAddButton: true, shouldEnableAddButton: true };
+  } catch (err) {
+    console.error("Auto-check failed:", err);
+    // On error, allow adding
+    return { shouldShowAddButton: true, shouldEnableAddButton: true };
+  }
+}
+
 function resolvePopupFeatures(cardData, popupCfg) {
   const available = [];
   const sentenceVisible =
@@ -1255,35 +1357,47 @@ async function addNoteToAnki(dataOfCard, popup) {
     async (response) => {
       console.log("PopupDrictionary.js::addNoteToAnki responed:", response);
       if (!response) {
-        alert("😵 Không kết nối được Anki");
+        showFeedback(popup, "Error: Could not connect to Anki", "error");
         return;
       }
 
       const addBtn = popup?.querySelector(".yomi-add-anki-btn");
+      
+      // Handle duplicate case
       if (response.duplicate) {
+        showFeedback(popup, `Note already in Anki`, "info");
+        showViewLink(popup, response.noteIds);
+        popup._ankiNoteIds = response.noteIds;
+        
         if (addBtn) {
-          addBtn.textContent = "Added";
           addBtn.disabled = true;
-          ensureUpdateButton(popup, () => updateExistingAnkiCard(dataOfCard, response.noteIds?.[0], popup));
         }
-        if (uiCfg.showBrowserButton !== false) {
-          showBrowserButton(popup, response.noteIds, false, "Already added in Anki");
-        }
+        
+        // Show Update button after Add action (even if duplicate)
+        ensureUpdateButton(popup, () => {
+          const payload = buildAnkiPayload(dataOfCard, popup);
+          updateExistingAnkiCard(payload, response.noteIds?.[0], popup);
+        });
         return;
       }
 
+      // Handle success case
       if (response.success) {
-        if (uiCfg.showBrowserButton !== false) {
-          if (addBtn) {
-            addBtn.textContent = "View Browser";
-            addBtn.onclick = () => showBrowserButton(popup, response.noteIds, true, "");
-          }
-          showBrowserButton(popup, response.noteIds, false, "");
-        } else {
-          alert("✅ Đã thêm vào Anki!");
+        showFeedback(popup, `Added ${dataOfCard.term || "word"} to Anki`, "success");
+        showViewLink(popup, response.noteIds);
+        popup._ankiNoteIds = response.noteIds;
+        
+        if (addBtn) {
+          addBtn.disabled = true;
         }
+        
+        // Show Update button after successful Add
+        ensureUpdateButton(popup, () => {
+          const payload = buildAnkiPayload(dataOfCard, popup);
+          updateExistingAnkiCard(payload, response.noteIds?.[0], popup);
+        });
       } else {
-        alert("😵 Lỗi: " + response.error);
+        showFeedback(popup, `Error: ${response.error || "Failed to add note"}`, "error");
       }
     },
   );
@@ -1307,7 +1421,7 @@ function showBrowserButton(popup, noteIds = [], forceClick = false, message = ""
   viewBtn.title = message ? `${message} [${getShortcutLabel("viewBrowser")}]` : `View Browser [${getShortcutLabel("viewBrowser")}]`;
   viewBtn.onclick = () => {
     chrome.runtime.sendMessage(
-      { action: "openAnkiBrowser", query },
+      { action: "guiBrowse", query },
       () => {},
     );
   };
@@ -1321,9 +1435,10 @@ function ensureUpdateButton(popup, handler) {
     btn = document.createElement("button");
     btn.className = "yomi-update-anki-btn";
     btn.textContent = "Update card";
-    const header = popup.querySelector(".yomi-header-main");
+    const header = popup.querySelector(".yomi-header-actions");
     if (header) header.appendChild(btn);
   }
+  btn.style.display = "inline-block";
   btn.title = `Update card [${getShortcutLabel("updateCard")}]`;
   btn.onclick = handler;
   btn.disabled = false;
@@ -1331,16 +1446,18 @@ function ensureUpdateButton(popup, handler) {
 
 function updateExistingAnkiCard(extensionData, noteId, popup) {
   if (!noteId) return;
+  console.log("Updating Anki note:", noteId, extensionData);
   chrome.runtime.sendMessage(
     { action: "updateAnkiNote", noteId, data: extensionData },
     (res) => {
       if (!res || !res.success) {
-        alert("Không cập nhật được card.");
+        showFeedback(popup, "Failed to update card", "error");
       } else {
-        const addBtn = popup?.querySelector(".yomi-add-anki-btn");
-        if (addBtn) {
-          addBtn.textContent = "Updated";
-          addBtn.disabled = true;
+        showFeedback(popup, "Card updated successfully", "success");
+        const updateBtn = popup?.querySelector(".yomi-update-anki-btn");
+        if (updateBtn) {
+          updateBtn.textContent = "Updated";
+          updateBtn.disabled = true;
         }
       }
     },
@@ -1349,7 +1466,16 @@ function updateExistingAnkiCard(extensionData, noteId, popup) {
 
 async function showPopup(x, y, data, level) {
   console.log("showPopup called with:", { x, y, data, level });
+  console.log("Frequency data in data.freqs:", data.freqs);
   removePopupsAbove(level - 1);
+
+  // Extract and format frequency data if available
+  if (!data.frequency && data.freqs && data.freqs.length > 0) {
+    data.frequency = data.freqs
+      .map(f => `${f.resource.title || f.resource.id}: ${f.entries[0].value}`)
+      .join(" | ");
+    console.log("Formatted frequency:", data.frequency);
+  }
 
   const newPopup = document.createElement("div");
   newPopup.className = "yomitan-popup-stack";
@@ -1383,14 +1509,28 @@ async function showPopup(x, y, data, level) {
 
   newPopup.innerHTML = `
         <div class="yomi-header">
-            <div class="yomi-header-main">
-                <div class="yomi-header-title">
-                  <div class="popup-ipa-line">/${data.pronunciation || "n/a"}/</div>
-                  <span class="popup-term-title">${escapeHtml(data.term || "")}</span>
+            <!-- Row 1: Meta & Action -->
+            <div class="yomi-header-row-1">
+                <span class="yomi-pronunciation">/${data.pronunciation || "n/a"}/</span>
+                <div class="yomi-header-actions">
+                  <button class="yomi-update-anki-btn" style="display: none;" title="Update card [${getShortcutLabel("updateCard")}]" type="button">Update (U)</button>
+                  <button class="yomi-add-anki-btn" title="Add to Anki [${getShortcutLabel("addToAnki")}]" type="button">Add (R)</button>
                 </div>
-                <button class="yomi-add-anki-btn" title="Add to Anki [${getShortcutLabel("addToAnki")}]" type="button">Add Anki</button>
             </div>
-            ${data.originalWord ? `<div class="yomi-origin-note">(Gốc của: <span>${escapeHtml(data.originalWord)}</span>)</div>` : ""}
+            
+            <!-- Row 2: Target Word -->
+            <div class="yomi-header-row-2">
+                <span class="popup-term-title">${escapeHtml(data.term || "")}</span>
+            </div>
+            
+            <!-- Row 3: Information -->
+            <div class="yomi-header-row-3">
+                ${data.frequency ? `<span class="yomi-frequency">frequency: ${escapeHtml(String(data.frequency))}</span>` : ""}
+                ${data.originalWord ? `<span class="yomi-origin-note">(root: <span>${escapeHtml(data.originalWord)}</span>)</span>` : ""}
+            </div>
+            
+            <!-- Row 4: Feedback Bar -->
+            <div class="yomi-feedback-bar"></div>
         </div>
 
         <section class="yomi-feature-shell">
@@ -1449,6 +1589,49 @@ async function showPopup(x, y, data, level) {
   if (savedSize?.width) newPopup.style.width = `${savedSize.width}px`;
   if (savedSize?.height) newPopup.style.height = `${savedSize.height}px`;
 
+  // Get button references
+  const addBtn = newPopup.querySelector(".yomi-add-anki-btn");
+  const updateBtn = newPopup.querySelector(".yomi-update-anki-btn");
+  
+  // Gắn sự kiện Add to Anki TRƯỚC KHI disable
+  if (addBtn) {
+    addBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const payload = buildAnkiPayload(data, newPopup);
+      addNoteToAnki(payload, newPopup);
+    });
+  }
+
+  // Check Anki connection and configure Add button
+  const ankiConnected = await checkAnkiConnection();
+  
+  // Hide Update button initially (only show after successful Add)
+  if (updateBtn) {
+    updateBtn.style.display = "none";
+  }
+  
+  if (!ankiConnected) {
+    // Anki not connected - hide Add button
+    if (addBtn) {
+      addBtn.style.display = "none";
+    }
+  } else {
+    // Anki connected - check allowDuplicate and existing notes
+    const ankiConfig = await loadAnkiUIConfig();
+    const checkResult = await autoCheckAnkiOnOpen(newPopup, data, ankiConfig);
+    
+    if (addBtn) {
+      if (!checkResult.shouldShowAddButton) {
+        addBtn.style.display = "none";
+      } else {
+        addBtn.disabled = !checkResult.shouldEnableAddButton;
+        if (!checkResult.shouldEnableAddButton) {
+          addBtn.title = "Note already exists in Anki";
+        }
+      }
+    }
+  }
+
   renderFeatureToolbar(newPopup);
   setActiveFeature(newPopup, newPopup._activeFeature);
 
@@ -1460,17 +1643,6 @@ async function showPopup(x, y, data, level) {
 
   // Render Other Dictionaries
   renderOtherDictionaries(newPopup, data, popupCfg);
-
-  // Gắn sự kiện Add to Anki
-  const addBtn = newPopup.querySelector(".yomi-add-anki-btn");
-
-  if (addBtn) {
-    addBtn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      const payload = buildAnkiPayload(data, newPopup);
-      addNoteToAnki(payload, newPopup);
-    });
-  }
 
   renderDefinitionBlocks(newPopup, data);
 

@@ -20,6 +20,67 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 5000) {
 }
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  // Check Anki connection
+  if (request.action === "checkAnkiConnection") {
+    ankiInvoke("version")
+      .then((res) => {
+        if (res && !res.error) {
+          sendResponse({ connected: true, version: res.result });
+        } else {
+          sendResponse({ connected: false });
+        }
+      })
+      .catch(() => sendResponse({ connected: false }));
+    return true;
+  }
+
+  // Check if note exists in Anki
+  if (request.action === "checkNoteExists") {
+    const word = request.word;
+    console.log("=== checkNoteExists DEBUG ===");
+    console.log("Word to check:", word);
+    
+    if (!word) {
+      sendResponse({ exists: false });
+      return;
+    }
+    
+    loadAnkiConfig()
+      .then(async (cfg) => {
+        console.log("Anki config:", cfg);
+        const targetField = cfg.fieldMapping?.["Target word"];
+        console.log("Target field name:", targetField);
+        
+        if (!targetField) {
+          console.log("ERROR: No target field mapping found!");
+          sendResponse({ exists: false });
+          return;
+        }
+        
+        // Fix: Use exact match with note type and field
+        const modelName = cfg.modelName || "";
+        const query = `note:"${modelName}" "${targetField}:${word}"`;
+        console.log("Search query:", query);
+        
+        const found = await ankiInvoke("findNotes", { query });
+        console.log("Search result:", found);
+        console.log("Found notes count:", found.result?.length || 0);
+        
+        if (Array.isArray(found.result) && found.result.length > 0) {
+          console.log("Note IDs found:", found.result);
+          sendResponse({ exists: true, noteIds: found.result });
+        } else {
+          console.log("No notes found");
+          sendResponse({ exists: false });
+        }
+      })
+      .catch((err) => {
+        console.error("checkNoteExists error:", err);
+        sendResponse({ exists: false });
+      });
+    return true;
+  }
+
   if (request.action === "search_word") {
     getConfig()
       .then((cfg) => cfg || {})
@@ -101,7 +162,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true; // Giữ kết nối bất đồng bộ
   }
 
-  if (request.action === "openAnkiBrowser") {
+  if (request.action === "guiBrowse") {
     const query = request.query || "";
     ankiInvoke("guiBrowse", { query })
       .then((res) => sendResponse({ success: true, result: res }))
@@ -116,9 +177,65 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       sendResponse({ success: false, error: "Missing noteId" });
       return;
     }
+    
     loadAnkiConfig()
       .then(async (cfg) => {
         const fields = buildFieldsFromMapping(data, cfg);
+        console.log("updateAnkiNote::Initial fields:", fields);
+        
+        // Process audio files (same as handleAddToAnki)
+        const audioUrls =
+          Array.isArray(data.audioList) && data.audioList.length > 0
+            ? data.audioList
+            : data.audio
+              ? [data.audio]
+              : [];
+
+        if (audioUrls.length > 0) {
+          try {
+            const soundTags = [];
+            for (const url of audioUrls) {
+              const filename = `${data.term}_${Date.now()}_${soundTags.length + 1}.mp3`;
+              const base64 = await downloadAudioAsBase64(url);
+              const soundTag = await uploadAudioToAnki(filename, base64);
+              soundTags.push(soundTag);
+            }
+
+            const audioFieldName = cfg.fieldMapping["Word audio"];
+            if (audioFieldName) {
+              fields[audioFieldName] = soundTags.join(" ");
+            }
+          } catch (e) {
+            console.error("updateAnkiNote::Error processing audio:", e);
+          }
+        }
+
+        // Process image files (same as handleAddToAnki)
+        const imageUrls =
+          Array.isArray(data.images) && data.images.length > 0
+            ? data.images
+            : data.image
+              ? [data.image]
+              : [];
+
+        if (imageUrls.length > 0) {
+          try {
+            const imageTags = [];
+            for (const url of imageUrls) {
+              const filename = `img_${data.term}_${Date.now()}_${imageTags.length + 1}.jpg`;
+              const base64 = await downloadAudioAsBase64(url);
+              const imgTag = await uploadImageToAnki(filename, base64);
+              imageTags.push(imgTag);
+            }
+
+            const imgField = cfg.fieldMapping["Images"];
+            if (imgField) fields[imgField] = imageTags.join("");
+          } catch (e) {
+            console.error("updateAnkiNote::Error processing images:", e);
+          }
+        }
+        
+        console.log("updateAnkiNote::Final fields:", fields);
         const res = await ankiInvoke("updateNoteFields", {
           note: { id: noteId, fields },
         });
@@ -347,7 +464,8 @@ async function handleAddToAnki(extensionData) {
     const targetField = config.fieldMapping?.["Target word"];
     const targetValue = targetField ? fields[targetField] : null;
     if (targetValue) {
-      const dupQuery = `"${targetValue}"`;
+      const modelName = config.modelName || "";
+      const dupQuery = `note:"${modelName}" "${targetField}:${targetValue}"`;
       const found = await ankiInvoke("findNotes", { query: dupQuery });
       if (Array.isArray(found.result) && found.result.length > 0) {
         return { duplicate: true, noteIds: found.result };
