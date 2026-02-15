@@ -183,6 +183,26 @@ function showFeedbackWithModal(popup, noteIds, cardData) {
       }
     };
   }
+  
+  // Store all noteIds for "Update all" functionality
+  popup._selectedNotesForUpdate = null; // null means update all
+}
+
+function updateFeedbackWithSelection(popup, totalNotes, selectedCount) {
+  if (!popup) return;
+  
+  const feedbackBar = popup.querySelector(".yomi-feedback-bar");
+  if (!feedbackBar) return;
+  
+  const message = feedbackBar.querySelector(".yomi-feedback-message");
+  if (!message) return;
+  
+  // Update message text to show selection
+  if (selectedCount > 0) {
+    message.textContent = `Found ${totalNotes} existing notes (${selectedCount})`;
+  } else {
+    message.textContent = `Found ${totalNotes} existing notes`;
+  }
 }
 
 function showNoteSelectionModal(popup, notes, cardData) {
@@ -195,6 +215,10 @@ function showNoteSelectionModal(popup, notes, cardData) {
     return deckA.localeCompare(deckB);
   });
   
+  // Get previously selected notes
+  const previousSelection = popup._selectedNotesForUpdate || [];
+  const previousSelectionSet = new Set(previousSelection);
+  
   // Create modal backdrop
   const backdrop = document.createElement("div");
   backdrop.className = "yomi-modal-backdrop";
@@ -204,26 +228,30 @@ function showNoteSelectionModal(popup, notes, cardData) {
   modal.className = "yomi-modal-container";
   modal.innerHTML = `
     <div class="yomi-modal-header">
-      <span class="yomi-modal-title">Select notes to update</span>
+      <span class="yomi-modal-title">Select notes to update (0 selected)</span>
       <div class="yomi-modal-actions">
         <button class="yomi-modal-btn yomi-select-all-btn">Select All</button>
         <button class="yomi-modal-btn yomi-clear-all-btn">Clear All</button>
       </div>
     </div>
     <div class="yomi-modal-body">
-      ${sortedNotes.map(note => `
-        <label class="yomi-note-item">
-          <input type="checkbox" class="yomi-note-checkbox" data-noteid="${note.noteId}">
-          <div class="yomi-note-info">
-            <div class="yomi-note-id">ID: ${note.noteId}</div>
-            <div class="yomi-note-deck">Deck: ${escapeHtml(String(note.deckName || "Unknown"))}</div>
-            <div class="yomi-note-date">Created: ${escapeHtml(String(note.created || "Unknown"))}</div>
-          </div>
-        </label>
-      `).join("")}
+      ${sortedNotes.map(note => {
+        const isChecked = previousSelectionSet.has(note.noteId);
+        return `
+          <label class="yomi-note-item">
+            <input type="checkbox" class="yomi-note-checkbox" data-noteid="${note.noteId}" ${isChecked ? 'checked' : ''}>
+            <div class="yomi-note-info">
+              <div class="yomi-note-id" data-noteid="${note.noteId}" title="Click to view in Anki Browser">ID: ${note.noteId}</div>
+              <div class="yomi-note-deck">Deck: ${escapeHtml(String(note.deckName || "Unknown"))}</div>
+              <div class="yomi-note-date">Created: ${escapeHtml(String(note.created || "Unknown"))}</div>
+            </div>
+          </label>
+        `;
+      }).join("")}
     </div>
     <div class="yomi-modal-footer">
       <button class="yomi-modal-btn yomi-modal-cancel">Cancel</button>
+      <button class="yomi-modal-btn yomi-modal-select">Chọn</button>
       <button class="yomi-modal-btn yomi-modal-confirm" disabled>Confirm (0 notes)</button>
     </div>
   `;
@@ -231,16 +259,22 @@ function showNoteSelectionModal(popup, notes, cardData) {
   backdrop.appendChild(modal);
   popup.appendChild(backdrop);
   
-  // Store selected notes
-  const selectedNotes = new Set();
+  // Store selected notes - initialize with previous selection
+  const selectedNotes = new Set(previousSelection);
   
-  // Update confirm button text
-  const updateConfirmButton = () => {
+  // Update title and confirm button text
+  const updateUI = () => {
+    const title = modal.querySelector(".yomi-modal-title");
     const confirmBtn = modal.querySelector(".yomi-modal-confirm");
     const count = selectedNotes.size;
-    confirmBtn.textContent = `Confirm (${count} note${count !== 1 ? "s" : ""})`;
+    
+    title.textContent = `Select notes to update (${count} selected)`;
+    confirmBtn.textContent = `Confirm`;
     confirmBtn.disabled = count === 0;
   };
+  
+  // Initial UI update to reflect previous selection
+  updateUI();
   
   // Checkbox change handler
   modal.querySelectorAll(".yomi-note-checkbox").forEach(checkbox => {
@@ -251,7 +285,24 @@ function showNoteSelectionModal(popup, notes, cardData) {
       } else {
         selectedNotes.delete(noteId);
       }
-      updateConfirmButton();
+      updateUI();
+    };
+  });
+  
+  // NoteID click handler - open in Anki Browser
+  modal.querySelectorAll(".yomi-note-id").forEach(noteIdEl => {
+    noteIdEl.style.cursor = "pointer";
+    noteIdEl.style.color = "var(--yomi-primary)";
+    noteIdEl.style.textDecoration = "underline";
+    
+    noteIdEl.onclick = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const noteId = noteIdEl.getAttribute("data-noteid");
+      chrome.runtime.sendMessage({
+        action: "guiBrowse",
+        query: `nid:${noteId}`
+      });
     };
   });
   
@@ -262,7 +313,7 @@ function showNoteSelectionModal(popup, notes, cardData) {
       const noteId = Number(checkbox.getAttribute("data-noteid"));
       selectedNotes.add(noteId);
     });
-    updateConfirmButton();
+    updateUI();
   };
   
   // Clear All button
@@ -271,8 +322,94 @@ function showNoteSelectionModal(popup, notes, cardData) {
       checkbox.checked = false;
     });
     selectedNotes.clear();
-    updateConfirmButton();
+    updateUI();
   };
+  
+  // Cancel button - clear selection and close
+  const cancelModal = () => {
+    popup._selectedNotesForUpdate = null;
+    backdrop.remove();
+  };
+  
+  modal.querySelector(".yomi-modal-cancel").onclick = cancelModal;
+  
+  // Chọn button - save selection and close (like backdrop click)
+  const selectAndClose = () => {
+    if (selectedNotes.size > 0) {
+      popup._selectedNotesForUpdate = Array.from(selectedNotes);
+      // Update feedback message to show selection count
+      updateFeedbackWithSelection(popup, popup._ankiNoteIds.length, selectedNotes.size);
+    } else {
+      popup._selectedNotesForUpdate = null; // null = update all
+      // Update feedback message to show no selection (will update all)
+      updateFeedbackWithSelection(popup, popup._ankiNoteIds.length, 0);
+    }
+    backdrop.remove();
+  };
+  
+  modal.querySelector(".yomi-modal-select").onclick = selectAndClose;
+  
+  // Click backdrop to close (same as Chọn button)
+  backdrop.onclick = (e) => {
+    if (e.target === backdrop) {
+      selectAndClose();
+    }
+  };
+  
+  // Confirm button - update immediately
+  modal.querySelector(".yomi-modal-confirm").onclick = async () => {
+    const count = selectedNotes.size;
+    if (count === 0) return;
+    
+    // Show confirmation modal inside popup
+    showConfirmationModal(popup, count, async () => {
+      backdrop.remove();
+      
+      // Update selected notes
+      const payload = buildAnkiPayload(cardData, popup);
+      const noteIdsArray = Array.from(selectedNotes);
+      
+      await updateMultipleNotes(popup, noteIdsArray, payload);
+    });
+  };
+  
+  // Auto-close on navigation events (same as Chọn button)
+  const autoCloseHandler = () => {
+    if (backdrop.parentNode) {
+      selectAndClose();
+    }
+  };
+  
+  // Listen to various navigation events
+  popup.addEventListener("scroll", autoCloseHandler, { once: true });
+  popup.querySelectorAll(".yomi-feature-btn").forEach(btn => {
+    btn.addEventListener("click", autoCloseHandler, { once: true });
+  });
+}
+
+function showConfirmationModal(popup, count, onConfirm) {
+  // Create modal backdrop
+  const backdrop = document.createElement("div");
+  backdrop.className = "yomi-modal-backdrop";
+  
+  // Create modal
+  const modal = document.createElement("div");
+  modal.className = "yomi-modal-container";
+  modal.innerHTML = `
+    <div class="yomi-modal-header">
+      <span class="yomi-modal-title">Confirm Update</span>
+    </div>
+    <div class="yomi-modal-body">
+      <p>Bạn có chắc muốn update ${count} note${count !== 1 ? "s" : ""}?</p>
+    </div>
+    <div class="yomi-modal-footer">
+      <button class="yomi-modal-btn yomi-modal-cancel">Cancel</button>
+      <button class="yomi-modal-btn yomi-modal-confirm" style="background: var(--yomi-primary); color: white; border-color: var(--yomi-primary);">Confirm</button>
+    </div>
+  `;
+  
+  backdrop.appendChild(modal);
+  popup.appendChild(backdrop);
   
   // Cancel button
   const closeModal = () => {
@@ -289,64 +426,43 @@ function showNoteSelectionModal(popup, notes, cardData) {
   };
   
   // Confirm button
-  modal.querySelector(".yomi-modal-confirm").onclick = async () => {
-    const count = selectedNotes.size;
-    if (count === 0) return;
-    
-    // Show confirmation dialog
-    if (!confirm(`Bạn có chắc muốn update ${count} note${count !== 1 ? "s" : ""}?`)) {
-      return;
-    }
-    
+  modal.querySelector(".yomi-modal-confirm").onclick = () => {
     closeModal();
-    
-    // Update all selected notes in parallel
-    const payload = buildAnkiPayload(cardData, popup);
-    const noteIdsArray = Array.from(selectedNotes);
-    
-    showFeedback(popup, `Updating ${count} notes...`, "info");
-    
-    const results = await Promise.allSettled(
-      noteIdsArray.map(noteId => 
-        new Promise((resolve, reject) => {
-          chrome.runtime.sendMessage(
-            { action: "updateAnkiNote", noteId, data: payload },
-            (res) => {
-              if (res?.success) {
-                resolve(noteId);
-              } else {
-                reject(new Error(res?.error || "Failed"));
-              }
+    onConfirm();
+  };
+}
+
+async function updateMultipleNotes(popup, noteIds, payload) {
+  const count = noteIds.length;
+  showFeedback(popup, `Updating ${count} note${count !== 1 ? "s" : ""}...`, "info");
+  
+  const results = await Promise.allSettled(
+    noteIds.map(noteId => 
+      new Promise((resolve, reject) => {
+        chrome.runtime.sendMessage(
+          { action: "updateAnkiNote", noteId, data: payload },
+          (res) => {
+            if (res?.success) {
+              resolve(noteId);
+            } else {
+              reject(new Error(res?.error || "Failed"));
             }
-          );
-        })
-      )
-    );
-    
-    const successful = results.filter(r => r.status === "fulfilled").length;
-    const failed = results.filter(r => r.status === "rejected").length;
-    
-    if (failed === 0) {
-      showFeedback(popup, `Updated ${successful} note${successful !== 1 ? "s" : ""} successfully`, "success");
-    } else {
-      showFeedback(popup, `Updated ${successful}/${count} notes (${failed} failed)`, "error");
-    }
-    
-    showViewLink(popup, noteIdsArray);
-  };
+          }
+        );
+      })
+    )
+  );
   
-  // Auto-close on navigation events
-  const autoCloseHandler = () => {
-    if (backdrop.parentNode) {
-      closeModal();
-    }
-  };
+  const successful = results.filter(r => r.status === "fulfilled").length;
+  const failed = results.filter(r => r.status === "rejected").length;
   
-  // Listen to various navigation events
-  popup.addEventListener("scroll", autoCloseHandler, { once: true });
-  popup.querySelectorAll(".yomi-feature-btn").forEach(btn => {
-    btn.addEventListener("click", autoCloseHandler, { once: true });
-  });
+  if (failed === 0) {
+    showFeedback(popup, `Updated ${successful} note${successful !== 1 ? "s" : ""} successfully`, "success");
+  } else {
+    showFeedback(popup, `Updated ${successful}/${count} notes (${failed} failed)`, "error");
+  }
+  
+  showViewLink(popup, noteIds);
 }
 
 function dismissFeedback(popup) {
@@ -1845,6 +1961,28 @@ async function showPopup(x, y, data, level) {
       ensureUpdateButton(newPopup, () => {
         const payload = buildAnkiPayload(data, newPopup);
         updateExistingAnkiCard(payload, newPopup._selectedNoteId, newPopup);
+      });
+    }
+    
+    // Show Update button for multiple notes case
+    if (checkResult.noteIds && checkResult.noteIds.length > 1 && updateBtn) {
+      ensureUpdateButton(newPopup, async () => {
+        const payload = buildAnkiPayload(data, newPopup);
+        
+        // Check if user selected specific notes
+        if (newPopup._selectedNotesForUpdate && newPopup._selectedNotesForUpdate.length > 0) {
+          // Update only selected notes
+          const count = newPopup._selectedNotesForUpdate.length;
+          if (confirm(`Bạn có chắc muốn update ${count} note${count !== 1 ? "s" : ""} đã chọn?`)) {
+            await updateMultipleNotes(newPopup, newPopup._selectedNotesForUpdate, payload);
+          }
+        } else {
+          // Update all notes
+          const count = checkResult.noteIds.length;
+          if (confirm(`Bạn có chắc muốn update tất cả ${count} notes?`)) {
+            await updateMultipleNotes(newPopup, checkResult.noteIds, payload);
+          }
+        }
       });
     }
   }
