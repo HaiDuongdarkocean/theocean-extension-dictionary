@@ -178,7 +178,7 @@ function extractTargetWord(range) {
 
 /**
  * Find sentence at offset position
- * PRIORITY 1: Find by target word (exact match with word boundaries)
+ * PRIORITY 1: Find by target word (proximity-based - choose closest to caret)
  * PRIORITY 2: Find by offset position
  * PRIORITY 3: Return first sentence (fallback)
  * 
@@ -190,16 +190,30 @@ function extractTargetWord(range) {
 function findSentenceAtOffset(segments, offset, targetWord) {
   if (!segments || segments.length === 0) return '';
   
-  // PRIORITY 1: Find sentence containing target word (with word boundary)
+  // PRIORITY 1: Find sentence containing target word (PROXIMITY-BASED)
   if (targetWord && targetWord.trim() !== '') {
     // Create regex with word boundaries to match exact word
     const wordRegex = new RegExp(`\\b${targetWord.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
     
-    for (const seg of segments) {
-      if (wordRegex.test(seg.segment)) {
-        console.log(`✓ Found sentence by target word "${targetWord}":`, seg.segment.trim());
-        return seg.segment.trim();
+    // Find ALL sentences containing target word
+    const matchingSentences = segments.filter(seg => wordRegex.test(seg.segment));
+    
+    if (matchingSentences.length > 0) {
+      // If only one match, return it
+      if (matchingSentences.length === 1) {
+        console.log(`✓ Found sentence by target word "${targetWord}":`, matchingSentences[0].segment.trim());
+        return matchingSentences[0].segment.trim();
       }
+      
+      // Multiple matches: choose sentence with closest offset to caret
+      const closest = matchingSentences.reduce((best, current) => {
+        const bestDistance = Math.abs(best.index - offset);
+        const currentDistance = Math.abs(current.index - offset);
+        return currentDistance < bestDistance ? current : best;
+      });
+      
+      console.log(`✓ Found sentence by target word "${targetWord}" (closest to offset ${offset}):`, closest.segment.trim());
+      return closest.segment.trim();
     }
     
     console.log(`✗ Target word "${targetWord}" not found in any sentence, falling back to offset`);

@@ -12,6 +12,7 @@ let activePopup = null;
 let shortcutConfig = null;
 let shortcutReady = false;
 let lastEscTime = 0;
+let lastMousePosition = { x: 0, y: 0 }; // Track last mouse position for keydown lookup
 const ESC_DOUBLE_CLICK_THRESHOLD = 300;
 const ShortcutUtils = window.ShortcutUtils;
 const POPUP_SIZE_KEY = "oceanPopupSize";
@@ -2276,7 +2277,176 @@ async function showPopup(x, y, data, level) {
   activePopup = newPopup;
 }
 
+/**
+ * Perform lookup at specified coordinates
+ * @param {number} clientX - X coordinate
+ * @param {number} clientY - Y coordinate
+ * @param {Element|null} closestPopup - Closest popup element (for level calculation)
+ */
+async function performLookup(clientX, clientY, closestPopup = null) {
+  let range = null;
+  if (typeof document.caretRangeFromPoint === "function") {
+    range = document.caretRangeFromPoint(clientX, clientY);
+  } else if (typeof document.caretPositionFromPoint === "function") {
+    const pos = document.caretPositionFromPoint(clientX, clientY);
+    if (pos && pos.offsetNode) {
+      range = document.createRange();
+      range.setStart(pos.offsetNode, pos.offset);
+      range.collapse(true);
+    }
+  }
+
+  // Debug logging
+  if (range) {
+    console.log("popupDictionary.js::Range:", range);
+    console.log("Mouse đang chạm vào:", range.startContainer);
+  } else {
+    console.log("Range trả về NULL tại:", clientX, clientY);
+  }
+
+  // Kiểm tra an toàn cho range
+  if (
+    !range ||
+    !range.startContainer ||
+    range.startContainer.nodeType !== Node.TEXT_NODE
+  )
+    return;
+
+  // --- MÀI LẠI ĐỘ NHẠY TẠI ĐÂY ---
+  const rect = range.getBoundingClientRect();
+
+  // Tăng padding lên 5-8px để dễ trúng hơn trên các dòng chữ thưa
+  const padding = 8;
+
+  const isOverText =
+    clientX >= rect.left - padding &&
+    clientX <= rect.right + padding &&
+    clientY >= rect.top - padding &&
+    clientY <= rect.bottom + padding;
+
+  // LOG ĐỂ KIỂM TRA: Nếu con thấy log này mà không thấy popup, nghĩa là padding vẫn hẹp
+  if (!isOverText) {
+    console.log("Chuột ở quá xa chữ:", clientX, rect.left);
+    return;
+  }
+
+  // Use Ocean Context Engine to get clean context
+  const oceanContext = getOceanContext(range);
+  
+  if (!oceanContext || !oceanContext.sentence || !oceanContext.word) {
+    console.log("Ocean Context Engine returned null or incomplete");
+    return;
+  }
+  
+  console.log("Ocean Context:", oceanContext);
+  
+  const sentence = oceanContext.sentence;
+  const targetWord = oceanContext.word;
+  
+  if (!sentence || sentence.trim() === "") return;
+  
+  // Find the position of target word in sentence
+  const targetWordIndex = sentence.toLowerCase().indexOf(targetWord.toLowerCase());
+  if (targetWordIndex < 0) {
+    console.log("Target word not found in sentence");
+    return;
+  }
+  
+  // Create context window: max 3 words/20 chars before, max 6 words/50 chars after
+  const beforeText = sentence.substring(0, targetWordIndex);
+  const afterText = sentence.substring(targetWordIndex);
+  
+  // Get last 3 words or 20 chars before target
+  const beforeWords = beforeText.trim().split(/\s+/);
+  const contextBefore = beforeWords.slice(-3).join(" ");
+  const contextBeforeLimited = contextBefore.length > 20 
+    ? contextBefore.substring(contextBefore.length - 20) 
+    : contextBefore;
+  
+  // Get first 6 words or 50 chars after target (including target)
+  const afterWords = afterText.trim().split(/\s+/);
+  const contextAfter = afterWords.slice(0, 6).join(" ");
+  const contextAfterLimited = contextAfter.length > 50 
+    ? contextAfter.substring(0, 50) 
+    : contextAfter;
+  
+  // Combine context window
+  const contextWindow = (contextBeforeLimited + " " + contextAfterLimited).trim();
+  
+  console.log(`Context window: "${contextWindow}"`);
+  console.log(`Target word in context: "${targetWord}"`);
+  
+  // Find the word in the context window to get proper lookup with lemmatization
+  const targetInContext = contextWindow.toLowerCase().indexOf(targetWord.toLowerCase());
+  const infoOfSentenceAndWord = await findLongestWord(contextWindow, targetInContext >= 0 ? targetInContext : 0);
+  
+  if (!infoOfSentenceAndWord) return;
+  
+  // Override with Ocean Context data
+  infoOfSentenceAndWord.sentence = sentence;
+  // Keep the lemmatized term from findLongestWord (e.g., "makes" -> "make")
+  console.log(`Lemmatized term: "${infoOfSentenceAndWord.term}" (original: "${targetWord}")`);
+  
+  // Store original word if lemmatization happened
+  if (infoOfSentenceAndWord.term.toLowerCase() !== targetWord.toLowerCase()) {
+    infoOfSentenceAndWord.originalWord = targetWord;
+  }
+  
+  console.log("popupDictionary.js::infoOfSentenceAndWord:", infoOfSentenceAndWord);
+
+  // --- ĐOẠN THÊM MỚI: DỊCH CÂU ---
+  // 1. Load config để xem user có bật "enableTranslate" không
+  const config = await new Promise((resolve) => {
+    chrome.storage.sync.get(["userConfig"], (res) =>
+      resolve(res.userConfig || {}),
+    );
+  });
+  const showSentence = config.sentence?.showSentence !== false;
+  const showTranslation = config.sentence?.showTranslation !== false;
+  infoOfSentenceAndWord._showSentence = showSentence;
+  infoOfSentenceAndWord._showTranslation = showTranslation;
+  infoOfSentenceAndWord._imagesEnabled = config.image?.enabled !== false;
+
+  if (showTranslation && config.translateEnabled && sentence) {
+    // Gửi tin nhắn nhờ Background dịch hộ
+    const translationResult = await new Promise((resolve) => {
+      chrome.runtime.sendMessage(
+        { action: "translateSentence", text: sentence },
+        resolve,
+      );
+    });
+
+    if (translationResult && translationResult.success) {
+      // Lưu bản dịch vào object để tý nữa hiển thị và lưu Anki
+      infoOfSentenceAndWord.sentenceTranslation = translationResult.text;
+    } else {
+      infoOfSentenceAndWord.sentenceTranslation = "Xảy ra lỗi dịch";
+    }
+  }
+  // ------------------------------
+
+  // KIỂM TRA TRÙNG TỪ
+  const isAlreadyShown = popupStack.some(
+    (p) =>
+      p.querySelector(".popup-term-title").innerText.trim().toLowerCase() ===
+      infoOfSentenceAndWord.term.toLowerCase(),
+  );
+  if (isAlreadyShown) return;
+
+  // Khi tìm thấy từ mới, hủy lệnh xóa để "Tiến lên" cấp cao hơn
+  clearTimeout(globalCloseTimer);
+  globalCloseTimer = null;
+
+  let level = closestPopup ? parseInt(closestPopup.dataset.level) + 1 : 1;
+
+  showPopup(clientX, clientY, infoOfSentenceAndWord, level);
+}
+
 document.addEventListener("mousemove", (event) => {
+  // Update last mouse position for keydown lookup
+  lastMousePosition.x = event.clientX;
+  lastMousePosition.y = event.clientY;
+  
   const closestPopup = event.target.closest(".yomitan-popup-stack");
   // console.log("Mouse moved. Closest popup:", closestPopup);
   // 1. QUẢN LÝ ĐÓNG (Sửa lỗi const và logic delay)
@@ -2309,161 +2479,32 @@ document.addEventListener("mousemove", (event) => {
   clearTimeout(lookupTimer);
   lookupTimer = setTimeout(async () => {
     if (!isLookupTriggered(event)) return;
-    let range = null;
-    if (typeof document.caretRangeFromPoint === "function") {
-      range = document.caretRangeFromPoint(event.clientX, event.clientY);
-    } else if (typeof document.caretPositionFromPoint === "function") {
-      const pos = document.caretPositionFromPoint(event.clientX, event.clientY);
-      if (pos && pos.offsetNode) {
-        range = document.createRange();
-        range.setStart(pos.offsetNode, pos.offset);
-        range.collapse(true);
-      }
-    }
-
-    // DÒNG KIỂM TRA ĐÂY:
-    if (range) {
-      console.log("popupDictionary.js::Range:", range);
-      console.log("Mouse đang chạm vào:", range.startContainer);
-    } else {
-      console.log("Range trả về NULL tại:", event.clientX, event.clientY);
-    }
-
-    // Kiểm tra an toàn cho range
-    if (
-      !range ||
-      !range.startContainer ||
-      range.startContainer.nodeType !== Node.TEXT_NODE
-    )
-      return;
-
-    // --- MÀI LẠI ĐỘ NHẠY TẠI ĐÂY ---
-    const rect = range.getBoundingClientRect();
-
-    // Tăng padding lên 5-8px để dễ trúng hơn trên các dòng chữ thưa
-    const padding = 8;
-
-    const isOverText =
-      event.clientX >= rect.left - padding &&
-      event.clientX <= rect.right + padding &&
-      event.clientY >= rect.top - padding &&
-      event.clientY <= rect.bottom + padding;
-
-    // LOG ĐỂ KIỂM TRA: Nếu con thấy log này mà không thấy popup, nghĩa là padding vẫn hẹp
-    if (!isOverText) {
-      console.log("Chuột ở quá xa chữ:", event.clientX, rect.left); // Bật lên khi cần debug
-      return;
-    }
-
-    // Use Ocean Context Engine to get clean context
-    const oceanContext = getOceanContext(range);
-    
-    if (!oceanContext || !oceanContext.sentence || !oceanContext.word) {
-      console.log("Ocean Context Engine returned null or incomplete");
-      return;
-    }
-    
-    console.log("Ocean Context:", oceanContext);
-    
-    const sentence = oceanContext.sentence;
-    const targetWord = oceanContext.word;
-    
-    if (!sentence || sentence.trim() === "") return;
-    
-    // Find the position of target word in sentence
-    const targetWordIndex = sentence.toLowerCase().indexOf(targetWord.toLowerCase());
-    if (targetWordIndex < 0) {
-      console.log("Target word not found in sentence");
-      return;
-    }
-    
-    // Create context window: max 3 words/20 chars before, max 6 words/50 chars after
-    const beforeText = sentence.substring(0, targetWordIndex);
-    const afterText = sentence.substring(targetWordIndex);
-    
-    // Get last 3 words or 20 chars before target
-    const beforeWords = beforeText.trim().split(/\s+/);
-    const contextBefore = beforeWords.slice(-3).join(" ");
-    const contextBeforeLimited = contextBefore.length > 20 
-      ? contextBefore.substring(contextBefore.length - 20) 
-      : contextBefore;
-    
-    // Get first 6 words or 50 chars after target (including target)
-    const afterWords = afterText.trim().split(/\s+/);
-    const contextAfter = afterWords.slice(0, 6).join(" ");
-    const contextAfterLimited = contextAfter.length > 50 
-      ? contextAfter.substring(0, 50) 
-      : contextAfter;
-    
-    // Combine context window
-    const contextWindow = (contextBeforeLimited + " " + contextAfterLimited).trim();
-    
-    console.log(`Context window: "${contextWindow}"`);
-    console.log(`Target word in context: "${targetWord}"`);
-    
-    // Find the word in the context window to get proper lookup with lemmatization
-    const targetInContext = contextWindow.toLowerCase().indexOf(targetWord.toLowerCase());
-    const infoOfSentenceAndWord = await findLongestWord(contextWindow, targetInContext >= 0 ? targetInContext : 0);
-    
-    if (!infoOfSentenceAndWord) return;
-    
-    // Override with Ocean Context data
-    infoOfSentenceAndWord.sentence = sentence;
-    // Keep the lemmatized term from findLongestWord (e.g., "makes" -> "make")
-    console.log(`Lemmatized term: "${infoOfSentenceAndWord.term}" (original: "${targetWord}")`);
-    
-    // Store original word if lemmatization happened
-    if (infoOfSentenceAndWord.term.toLowerCase() !== targetWord.toLowerCase()) {
-      infoOfSentenceAndWord.originalWord = targetWord;
-    }
-    
-    console.log("popupDictionary.js::infoOfSentenceAndWord:", infoOfSentenceAndWord);
-
-    // --- ĐOẠN THÊM MỚI: DỊCH CÂU ---
-    // 1. Load config để xem user có bật "enableTranslate" không
-    const config = await new Promise((resolve) => {
-      chrome.storage.sync.get(["userConfig"], (res) =>
-        resolve(res.userConfig || {}),
-      );
-    });
-    const showSentence = config.sentence?.showSentence !== false;
-    const showTranslation = config.sentence?.showTranslation !== false;
-    infoOfSentenceAndWord._showSentence = showSentence;
-    infoOfSentenceAndWord._showTranslation = showTranslation;
-    infoOfSentenceAndWord._imagesEnabled = config.image?.enabled !== false;
-
-    if (showTranslation && config.translateEnabled && sentence) {
-      // Gửi tin nhắn nhờ Background dịch hộ
-      const translationResult = await new Promise((resolve) => {
-        chrome.runtime.sendMessage(
-          { action: "translateSentence", text: sentence },
-          resolve,
-        );
-      });
-
-      if (translationResult && translationResult.success) {
-        // Lưu bản dịch vào object để tý nữa hiển thị và lưu Anki
-        infoOfSentenceAndWord.sentenceTranslation = translationResult.text;
-      } else {
-        infoOfSentenceAndWord.sentenceTranslation = "Xảy ra lỗi dịch";
-      }
-    }
-    // ------------------------------
-
-    // KIỂM TRA TRÙNG TỪ
-    const isAlreadyShown = popupStack.some(
-      (p) =>
-        p.querySelector(".popup-term-title").innerText.trim().toLowerCase() ===
-        infoOfSentenceAndWord.term.toLowerCase(),
-    );
-    if (isAlreadyShown) return;
-
-    // Khi tìm thấy từ mới, hủy lệnh xóa để "Tiến lên" cấp cao hơn
-    clearTimeout(globalCloseTimer);
-    globalCloseTimer = null;
-
-    let level = closestPopup ? parseInt(closestPopup.dataset.level) + 1 : 1;
-
-    showPopup(event.clientX, event.clientY, infoOfSentenceAndWord, level);
+    await performLookup(event.clientX, event.clientY, closestPopup);
   }, 150);
+});
+
+// Keydown listener for instant lookup when pressing lookup mode key
+document.addEventListener("keydown", async (event) => {
+  // Only trigger if we're in a modifier key lookup mode (not hover)
+  if (lookupMode === "hover") return;
+  
+  // Check if the pressed key matches the lookup mode
+  const shouldTrigger = 
+    (lookupMode === "ctrl" && event.ctrlKey && event.code === "ControlLeft" || event.code === "ControlRight") ||
+    (lookupMode === "alt" && event.altKey && (event.code === "AltLeft" || event.code === "AltRight")) ||
+    (lookupMode === "shift" && event.shiftKey && (event.code === "ShiftLeft" || event.code === "ShiftRight"));
+  
+  if (!shouldTrigger) return;
+  
+  // Prevent default behavior
+  event.preventDefault();
+  
+  // Find closest popup at last mouse position
+  const elementAtPoint = document.elementFromPoint(lastMousePosition.x, lastMousePosition.y);
+  const closestPopup = elementAtPoint?.closest(".yomitan-popup-stack");
+  
+  console.log("Keydown instant lookup triggered at:", lastMousePosition);
+  
+  // Perform lookup at last mouse position
+  await performLookup(lastMousePosition.x, lastMousePosition.y, closestPopup);
 });
