@@ -2355,51 +2355,69 @@ document.addEventListener("mousemove", (event) => {
       return;
     }
 
-    const blockText = extractBlockTextFromRange(range);
-    console.log("Block text:", blockText);
-    const sentence = extractFinalSentence(range);
-    console.log("Extracted sentence:", sentence);
-    if (!sentence | (sentence.trim() == "")) return;
-    // 1️⃣ Offset trong blockText
-    const textNode = range.startContainer;
-    const nodeText = textNode.textContent;
-
-    const nodeStartIndex = blockText.indexOf(nodeText);
-    if (nodeStartIndex === -1) return;
-
-    let absoluteOffset = nodeStartIndex + range.startOffset;
-
-    // 2️⃣ Tìm sentence start trong blockText
-    const sentenceStartIndex = blockText.indexOf(sentence);
-    if (sentenceStartIndex === -1) return;
-
-    // 3️⃣ Offset trong sentence
-    let relativeOffset = absoluteOffset - sentenceStartIndex;
-
-    // 4️⃣ Bây giờ mới tìm đầu từ
-    while (
-      relativeOffset > 0 &&
-      /[^\s\(\"\'\[\{\n]/.test(sentence[relativeOffset - 1])
-    ) {
-      relativeOffset--;
+    // Use Ocean Context Engine to get clean context
+    const oceanContext = getOceanContext(range);
+    
+    if (!oceanContext || !oceanContext.sentence || !oceanContext.word) {
+      console.log("Ocean Context Engine returned null or incomplete");
+      return;
     }
-
-    const infoOfSentenceAndWord = await findLongestWord(
-      sentence,
-      relativeOffset,
-    );
+    
+    console.log("Ocean Context:", oceanContext);
+    
+    const sentence = oceanContext.sentence;
+    const targetWord = oceanContext.word;
+    
+    if (!sentence || sentence.trim() === "") return;
+    
+    // Find the position of target word in sentence
+    const targetWordIndex = sentence.toLowerCase().indexOf(targetWord.toLowerCase());
+    if (targetWordIndex < 0) {
+      console.log("Target word not found in sentence");
+      return;
+    }
+    
+    // Create context window: max 3 words/20 chars before, max 6 words/50 chars after
+    const beforeText = sentence.substring(0, targetWordIndex);
+    const afterText = sentence.substring(targetWordIndex);
+    
+    // Get last 3 words or 20 chars before target
+    const beforeWords = beforeText.trim().split(/\s+/);
+    const contextBefore = beforeWords.slice(-3).join(" ");
+    const contextBeforeLimited = contextBefore.length > 20 
+      ? contextBefore.substring(contextBefore.length - 20) 
+      : contextBefore;
+    
+    // Get first 6 words or 50 chars after target (including target)
+    const afterWords = afterText.trim().split(/\s+/);
+    const contextAfter = afterWords.slice(0, 6).join(" ");
+    const contextAfterLimited = contextAfter.length > 50 
+      ? contextAfter.substring(0, 50) 
+      : contextAfter;
+    
+    // Combine context window
+    const contextWindow = (contextBeforeLimited + " " + contextAfterLimited).trim();
+    
+    console.log(`Context window: "${contextWindow}"`);
+    console.log(`Target word in context: "${targetWord}"`);
+    
+    // Find the word in the context window to get proper lookup with lemmatization
+    const targetInContext = contextWindow.toLowerCase().indexOf(targetWord.toLowerCase());
+    const infoOfSentenceAndWord = await findLongestWord(contextWindow, targetInContext >= 0 ? targetInContext : 0);
+    
     if (!infoOfSentenceAndWord) return;
-    infoOfSentenceAndWord.sentence = sentence; // Lưu lại câu để hiển thị trong popup. phục vụ cho anki.
-    console.log(
-      "popupDictionary.js::infoOfSentenceAndWord:",
-      infoOfSentenceAndWord,
-    );
-
-    console.log(
-      "Word candidate:",
-      sentence.substring(relativeOffset, relativeOffset + 20),
-    );
-    console.log("Calculated word relativeOffset:", relativeOffset);
+    
+    // Override with Ocean Context data
+    infoOfSentenceAndWord.sentence = sentence;
+    // Keep the lemmatized term from findLongestWord (e.g., "makes" -> "make")
+    console.log(`Lemmatized term: "${infoOfSentenceAndWord.term}" (original: "${targetWord}")`);
+    
+    // Store original word if lemmatization happened
+    if (infoOfSentenceAndWord.term.toLowerCase() !== targetWord.toLowerCase()) {
+      infoOfSentenceAndWord.originalWord = targetWord;
+    }
+    
+    console.log("popupDictionary.js::infoOfSentenceAndWord:", infoOfSentenceAndWord);
 
     // --- ĐOẠN THÊM MỚI: DỊCH CÂU ---
     // 1. Load config để xem user có bật "enableTranslate" không
