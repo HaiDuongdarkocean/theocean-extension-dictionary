@@ -1,7 +1,7 @@
 {
     "manifest_version": 3,
     "name": "The0cean",
-    "version": "1.0",
+    "version": "1.0.1",
     "description": "A multifunctional extension for language learners to look up words, get translations, hear pronunciations, and more.",
     "permissions": [
         "tts",
@@ -27,6 +27,8 @@
                 "scripts/regularRules.js",
                 "scripts/audioManager.js",
                 "scripts/shortcuts.js",
+                "scripts/oceanBundle.js",
+                "scripts/oceanDebug.js",
                 "scripts/popupDictionary.js"
             ],
             "css": [
@@ -38,7 +40,15 @@
     "web_accessible_resources": [
         {
             "resources": [
-                "dictionary.json"
+                "dictionary.json",
+                "scripts/oceanMatcher.js",
+                "scripts/oceanCompiler.js",
+                "scripts/oceanStorage.js",
+                "scripts/normalizer.js",
+                "scripts/storage.js",
+                "scripts/oceanMigration.js",
+                "data/Dictionary/*.json",
+                "data/Frequency_Eng/*.json"
             ],
             "matches": [
                 "<all_urls>"

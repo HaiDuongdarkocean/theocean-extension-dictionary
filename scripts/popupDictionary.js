@@ -716,10 +716,94 @@ async function getDefinitionSendMessage(word) {
 // 4. Hàm tìm từ dài nhất xung quanh vị trí offset
 async function findLongestWord(text, index) {
   console.log("Finding longest word in text:", text, "at index:", index);
+  
+  // 🌊 OCEAN ENGINE: Try phrasal pattern matching FIRST
+  // Wait for OCEAN to be ready (with timeout)
+  try {
+    const oceanTimeout = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('OCEAN timeout')), 1000)
+    );
+    
+    await Promise.race([window.oceanReady, oceanTimeout]);
+    
+    if (window.oceanMatcher) {
+      const { extractSentence, extractWordAtIndex, findPhrasalMatch, formatPhrasalResult } = window.oceanMatcher;
+      
+      // Get context sentence
+      const contextSentence = extractSentence(text, index);
+      const targetWord = extractWordAtIndex(text, index);
+      
+      console.log(`🌊 OCEAN: Attempting phrasal match for "${targetWord}" in context`);
+      
+      // Try matching with context sentence first
+      let phrasalMatch = await findPhrasalMatch(targetWord, contextSentence);
+      
+      // If no match, try with look ahead (longer context)
+      if (!phrasalMatch) {
+        const lookAhead = text.substring(index, index + 50);
+        console.log(`🌊 OCEAN: No match in sentence, trying look ahead: "${lookAhead}"`);
+        
+        // Extract first word from look ahead as target
+        const lookAheadWords = lookAhead.split(/\s+/);
+        const lookAheadTarget = lookAheadWords[0] || targetWord;
+        
+        // Try matching with look ahead context
+        phrasalMatch = await findPhrasalMatch(lookAheadTarget, lookAhead);
+      }
+      
+      if (phrasalMatch) {
+        console.log("✓ OCEAN: Phrasal match found, formatting result");
+        const formattedPhrasal = formatPhrasalResult(phrasalMatch);
+        
+        // Also get single word definition for comparison
+        const singleWordResult = await getDefinitionSendMessage(targetWord.toLowerCase());
+        
+        // Return both phrasal and single word results
+        return {
+          phrasal: formattedPhrasal,
+          singleWord: singleWordResult,
+          hasBoth: true
+        };
+      }
+    }
+  } catch (oceanError) {
+    if (oceanError.message === 'OCEAN timeout') {
+      console.warn("⚠️ OCEAN ENGINE loading timeout, using fallback");
+    } else {
+      console.error("⚠️ OCEAN: Error during phrasal matching (continuing with fallback):", oceanError);
+    }
+  }
+  
+  // FALLBACK: Existing longest word logic
   let lookAhead = text.substring(index, index + 50);
   console.log("Look ahead text:", lookAhead);
   let words = lookAhead.split(/\s+/);
   console.log("Split words:", words);
+
+  // --- LEMMATIZE FIRST WORD (target word) ---
+  if (words.length > 0) {
+    const firstWord = words[0].toLowerCase().replace(/[\.,!?;"\(\):]+$/, "");
+    let lemmatizedFirstWord = firstWord;
+    
+    // Check irregular map
+    if (window.irregularMap && window.irregularMap.has(firstWord)) {
+      const irregularInfo = window.irregularMap.get(firstWord);
+      lemmatizedFirstWord = irregularInfo.root;
+      console.log(`🔄 Lemmatize first word: "${firstWord}" → "${lemmatizedFirstWord}"`);
+    } 
+    // Try regular lemmatization
+    else if (typeof getRegularRoot === 'function') {
+      const regularInfo = await getRegularRoot(firstWord);
+      if (regularInfo && regularInfo.root) {
+        lemmatizedFirstWord = regularInfo.root;
+        console.log(`🔄 Lemmatize first word: "${firstWord}" → "${lemmatizedFirstWord}"`);
+      }
+    }
+    
+    // Replace first word with lemmatized version
+    words[0] = lemmatizedFirstWord;
+    console.log("Words after lemmatization:", words);
+  }
 
   for (let i = words.length; i > 0; i--) {
     // 1. Lấy cụm từ
@@ -730,46 +814,11 @@ async function findLongestWord(text, index) {
     console.log("Checking phrase:", cleanPhrase);
     if (cleanPhrase.length === 0) continue;
 
-    // --- BƯỚC 2: TRA TỪ GỐC TRỰC TIẾP (Nếu từ đó là nguyên thể) ---
-    // Tra chính "flies" (nếu từ điển có từ flies thì hiện luôn)
-    let directResult = await getDefinitionSendMessage(cleanPhrase);
-    if (directResult) return directResult;
-
-    // --- BƯỚC 1: TRA BẢNG BẤT QUY TẮC (O(1)) ---
-    if (window.irregularMap.has(cleanPhrase)) {
-      const irregularInfo = window.irregularMap.get(cleanPhrase);
-      console.log(
-        `Phát hiện từ bất quy tắc: ${cleanPhrase} -> ${irregularInfo.root}`,
-      );
-
-      // Gửi từ gốc (root) đi tra từ điển thay vì từ hiện tại
-      // Ví dụ: Tra "go" thay vì "went"
-      const result = await getDefinitionSendMessage(irregularInfo.root);
-
-      if (result) {
-        // Con có thể ghép thêm thông tin ngữ pháp vào kết quả để hiển thị
-        // Ví dụ: "Go (Quá khứ đơn của Go)"
-        result.grammarNote = irregularInfo.desc;
-        return result;
-      }
-    }
-
-    // --- BƯỚC 3: TỈA TỪ CÓ QUY TẮC (Regular Lemmatization) ---
-    const regularInfo = await getRegularRoot(cleanPhrase);
-
-    if (regularInfo) {
-      // Nếu tỉa được (vd: flies -> fly), tra từ gốc "fly"
-      console.log(`Đang tra từ gốc suy luận: ${regularInfo.root}`);
-      const rootResult = await getDefinitionSendMessage(regularInfo.root);
-
-      if (rootResult) {
-        // Thêm thông tin ngữ pháp vào kết quả hiển thị
-        // Ví dụ hiển thị: "Fly (Danh từ số nhiều / Động từ ngôi 3)"
-        rootResult.originalWord = cleanPhrase; // Lưu lại từ gốc người dùng chỉ vào
-        rootResult.grammarTag = regularInfo.tag;
-
-        return rootResult;
-      }
+    // --- TRA TỪ ĐIỂN VỚI PHRASE ĐÃ LEMMATIZE ---
+    const result = await getDefinitionSendMessage(cleanPhrase);
+    
+    if (result) {
+      return result;
     }
   }
   return null;
@@ -1222,19 +1271,54 @@ function toggleFocusedTtsSelection(popup) {
 
 function renderDefinitionBlocks(popup, data) {
   const container = popup.querySelector(".definition-container");
-  const blocks = parseDefinitionBlocks(data);
-  popup._definitionBlocks = blocks;
+  
+  // 🌊 OCEAN ENGINE: Handle combined phrasal + single word results
+  if (data.hasBoth && data.phrasal && data.singleWord) {
+    console.log("🌊 OCEAN: Rendering both phrasal and single word definitions");
+    
+    // Parse both definitions
+    const phrasalBlocks = parseDefinitionBlocks(data.phrasal);
+    const singleBlocks = parseDefinitionBlocks(data.singleWord);
+    
+    // Combine blocks with clear separation
+    const combinedBlocks = [
+      ...phrasalBlocks.map(b => ({ ...b, type: 'phrasal' })),
+      ...singleBlocks.map(b => ({ ...b, type: 'single' }))
+    ];
+    
+    popup._definitionBlocks = combinedBlocks;
+    
+    container.innerHTML = combinedBlocks
+      .map((block, index) => {
+        const typeLabel = block.type === 'phrasal' 
+          ? '<span class="ocean-type-badge phrasal">📘 Phrasal/Idiom</span>' 
+          : '<span class="ocean-type-badge single">📖 Single Word</span>';
+        
+        return `
+          <div class="yomi-definition-block ${block.type === 'phrasal' ? 'ocean-phrasal-block' : ''}" data-def-index="${index}">
+            ${typeLabel}
+            ${block.source ? `<div class="yomi-definition-source">${block.source}</div>` : ""}
+            <div class="yomi-definition-html">${block.html}</div>
+          </div>
+        `;
+      })
+      .join("");
+  } else {
+    // Standard single definition rendering
+    const blocks = parseDefinitionBlocks(data);
+    popup._definitionBlocks = blocks;
 
-  container.innerHTML = blocks
-    .map(
-      (block, index) => `
-      <div class="yomi-definition-block" data-def-index="${index}">
-        ${block.source ? `<div class="yomi-definition-source">${block.source}</div>` : ""}
-        <div class="yomi-definition-html">${block.html}</div>
-      </div>
-    `,
-    )
-    .join("");
+    container.innerHTML = blocks
+      .map(
+        (block, index) => `
+        <div class="yomi-definition-block" data-def-index="${index}">
+          ${block.source ? `<div class="yomi-definition-source">${block.source}</div>` : ""}
+          <div class="yomi-definition-html">${block.html}</div>
+        </div>
+      `,
+      )
+      .join("");
+  }
 
   popup._state = popup._state || {};
   popup._state.focusedDefIndex = 0;
@@ -2068,8 +2152,11 @@ async function showPopup(x, y, data, level) {
           }, 260);
         }
       } else {
+        // Try to get TTS voices from config first
         const ttsRows = getTtsVoiceRows(popupCfg.tts || {});
+        
         if (ttsRows.length > 0) {
+          // Use configured TTS voices
           newPopup._audioFullList = ttsRows.map((row) => ({
             url: "",
             ttsVoiceName: row.voiceName,
@@ -2078,8 +2165,52 @@ async function showPopup(x, y, data, level) {
           }));
           newPopup._audioWindowStart = 0;
           renderAudioGroup(newPopup);
+          
+          // Auto-play first TTS voice as fallback
+          setTimeout(() => {
+            const text = data.term || "";
+            if (text && ttsRows[0]?.voiceName) {
+              chrome.runtime.sendMessage({
+                action: "speakLocal",
+                text,
+                voiceName: ttsRows[0].voiceName,
+              });
+            }
+          }, 260);
         } else {
-          audioContainer.innerHTML = `<div class="yomi-feature-placeholder">No audio</div>`;
+          // Fallback: Use browser's built-in TTS voices
+          chrome.runtime.sendMessage({ action: "getAvailableVoices" }, (response) => {
+            const voices = response?.voices || [];
+            const englishVoices = voices.filter(v => v.lang && v.lang.startsWith('en'));
+            
+            if (englishVoices.length > 0) {
+              // Use first English voice
+              const voice = englishVoices[0];
+              newPopup._audioFullList = [{
+                url: "",
+                ttsVoiceName: voice.name,
+                speaker: voice.name,
+                region: voice.lang || "TTS",
+              }];
+              newPopup._audioWindowStart = 0;
+              renderAudioGroup(newPopup);
+              
+              // Auto-play
+              setTimeout(() => {
+                const text = data.term || "";
+                if (text) {
+                  chrome.runtime.sendMessage({
+                    action: "speakLocal",
+                    text,
+                    voiceName: voice.name,
+                  });
+                }
+              }, 260);
+            } else {
+              // No voices available at all
+              audioContainer.innerHTML = `<div class="yomi-feature-placeholder">No audio</div>`;
+            }
+          });
         }
       }
     });

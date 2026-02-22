@@ -37,3 +37,35 @@ export async function importFile(file) {
 
   throw new Error("Unsupported file type");
 }
+
+// Helper function to import dictionary from URL (for auto-import)
+export async function importDictionary(data, sourceName) {
+  // Create a fake File object from JSON data
+  const blob = new Blob([JSON.stringify(data)], { type: "application/json" });
+  const file = new File([blob], sourceName, { type: "application/json" });
+  
+  const importer = new MigakuImporter(file);
+  return importer.import();
+}
+
+// Helper function to import frequency list from URL (for auto-import)
+export async function importFrequencyList(data) {
+  // Frequency list import logic
+  // This should match the logic in options.js for frequency import
+  const { openDB } = await import("./database.js");
+  const db = await openDB();
+  
+  const tx = db.transaction("frequency", "readwrite");
+  const store = tx.objectStore("frequency");
+  
+  // Clear existing frequency data
+  await store.clear();
+  
+  // Import new frequency data
+  for (const [word, freq] of Object.entries(data)) {
+    await store.put({ word, frequency: freq });
+  }
+  
+  await tx.done;
+  console.log(`Imported ${Object.keys(data).length} frequency entries`);
+}

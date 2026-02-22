@@ -684,3 +684,329 @@ textarea::-webkit-scrollbar-thumb {
     grid-template-columns: 1fr;
   }
 }
+
+
+/* ============================================
+   🌊 OCEAN TEST PANEL STYLES
+   ============================================ */
+
+.ocean-test-card textarea {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.6;
+  resize: vertical;
+}
+
+.ocean-test-card textarea:focus {
+  outline: none;
+  box-shadow: var(--focus);
+  border-color: var(--primary);
+}
+
+.ocean-result {
+  margin-top: 20px;
+  padding: 20px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  min-height: 100px;
+  display: none;
+}
+
+.ocean-result.show {
+  display: block;
+}
+
+.ocean-result__header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.ocean-result__status {
+  font-size: 24px;
+}
+
+.ocean-result__title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0;
+}
+
+.ocean-result__subtitle {
+  font-size: 13px;
+  color: var(--text-sub);
+  margin: 0;
+}
+
+.ocean-result__body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ocean-result__row {
+  display: flex;
+  gap: 8px;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.ocean-result__label {
+  font-weight: 600;
+  color: var(--text-sub);
+  min-width: 120px;
+}
+
+.ocean-result__value {
+  color: var(--text);
+  flex: 1;
+}
+
+.ocean-result__badge {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+}
+
+.ocean-result__definition {
+  padding: 12px;
+  background: var(--surface);
+  border-radius: var(--radius-sm);
+  border-left: 3px solid var(--primary);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.ocean-result__detected {
+  padding: 8px 12px;
+  background: #fff3cd;
+  color: #856404;
+  border-radius: var(--radius-sm);
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 13px;
+}
+
+@media (prefers-color-scheme: dark) {
+  .ocean-result__detected {
+    background: #3d3416;
+    color: #ffc107;
+  }
+}
+
+/* Example List */
+.ocean-example-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.ocean-example {
+  padding: 16px;
+  border: 2px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.ocean-example:hover {
+  border-color: var(--primary);
+  box-shadow: 0 4px 12px rgba(8, 102, 255, 0.15);
+  transform: translateY(-2px);
+}
+
+.ocean-example__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.ocean-example__badge {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+}
+
+.ocean-example__word {
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 13px;
+  color: var(--text-sub);
+  font-weight: 600;
+}
+
+.ocean-example__sentence {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text);
+  margin-bottom: 8px;
+}
+
+.ocean-example__sentence mark {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-weight: 600;
+}
+
+.ocean-example__expected {
+  font-size: 12px;
+  color: var(--text-sub);
+  font-style: italic;
+}
+
+/* Debug Panel */
+.ocean-debug-buttons {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.ocean-console {
+  background: #1e1e1e;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  border: 1px solid #3e3e42;
+}
+
+.ocean-console__header {
+  background: #2d2d30;
+  padding: 10px 15px;
+  font-weight: 600;
+  color: #cccccc;
+  border-bottom: 1px solid #3e3e42;
+  font-size: 13px;
+}
+
+.ocean-console__content {
+  padding: 15px;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  max-height: 400px;
+  overflow-y: auto;
+  color: #d4d4d4;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+.ocean-console__content:empty::before {
+  content: 'Click a button above to see results...';
+  color: #858585;
+}
+
+/* Console log colors */
+.log-success { color: #4ec9b0; }
+.log-error { color: #f48771; }
+.log-warning { color: #dcdcaa; }
+.log-info { color: #9cdcfe; }
+.log-dim { color: #858585; }
+
+/* Voice Selection List */
+.voice-selection-list {
+  max-height: 300px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 8px;
+  display: grid;
+  gap: 6px;
+}
+
+.voice-selection-item {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+  gap: 12px;
+}
+
+.voice-selection-item .voice-play-btn {
+  flex-shrink: 0;
+  background: var(--surface);
+  padding: 6px 12px;
+  font-size: 13px;
+}
+
+.voice-selection-slots {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.voice-selection-slots label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  transition: all 0.2s ease;
+}
+
+.voice-selection-slots label:hover {
+  background: var(--primary);
+  color: white;
+  border-color: var(--primary);
+}
+
+.voice-selection-slots label span {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.voice-selection-slots input[type="radio"] {
+  margin: 0;
+  cursor: pointer;
+}
+
+.voice-selection-slots input[type="radio"]:checked + span {
+  color: var(--primary);
+}
+
+.voice-selection-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.voice-selection-name {
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.voice-selection-lang {
+  font-size: 12px;
+  color: var(--text-sub);
+}

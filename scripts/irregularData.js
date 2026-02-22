@@ -154,6 +154,13 @@ irregularVerbsSource.forEach(([v1, v2, v3]) => {
     }
 });
 
+// 3. XỬ LÝ ĐẶC BIỆT CHO "BE" (is, am, are, being)
+// Thêm các dạng hiện tại và phân từ hiện tại của "be"
+irregularMap.set("is", { root: "be", type: "verb_present_3rd", desc: "Hiện tại ngôi 3 số ít" });
+irregularMap.set("am", { root: "be", type: "verb_present_1st", desc: "Hiện tại ngôi 1 số ít" });
+irregularMap.set("are", { root: "be", type: "verb_present_plural", desc: "Hiện tại số nhiều" });
+irregularMap.set("being", { root: "be", type: "verb_present_participle", desc: "Phân từ hiện tại" });
+
 // XUẤT RA GLOBAL ĐỂ DÙNG Ở CÁC FILE KHÁC
 window.irregularMap = irregularMap;
 
@@ -163,3 +170,9 @@ console.log(`Đã học được: ${irregularMap.size} biến thể từ.`);
 console.log("Tra 'mice':", irregularMap.get("mice"));
 console.log("Tra 'went':", irregularMap.get("went"));
 console.log("Tra 'written':", irregularMap.get("written"));
+console.log("✅ Tra 'is':", irregularMap.get("is"));
+console.log("✅ Tra 'am':", irregularMap.get("am"));
+console.log("✅ Tra 'are':", irregularMap.get("are"));
+console.log("✅ Tra 'was':", irregularMap.get("was"));
+console.log("✅ Tra 'were':", irregularMap.get("were"));
+console.log("✅ Tra 'being':", irregularMap.get("being"));

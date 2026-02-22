@@ -1,7 +1,7 @@
 import { normalizeTermKey } from "./normalizer.js";
 
 const DB_NAME = "OceanDictionaryDB";
-const DB_VERSION = 1;
+const DB_VERSION = 2; // Incremented for phrasal_patterns store
 
 let dbPromise = null;
 
@@ -32,6 +32,15 @@ export function initDB() {
         const store = db.createObjectStore("freq_entries", { keyPath: "id", autoIncrement: true });
         store.createIndex("termKey", "termKey", { unique: false });
         store.createIndex("resourceTerm", ["resourceId", "termKey"], { unique: false });
+      }
+
+      // phrasal patterns store (OCEAN ENGINE)
+      if (!db.objectStoreNames.contains("phrasal_patterns")) {
+        const store = db.createObjectStore("phrasal_patterns", { keyPath: "id", autoIncrement: true });
+        store.createIndex("anchorWord", "anchorWord", { unique: false });
+        store.createIndex("anchorPriority", ["anchorWord", "priority"], { unique: false });
+        store.createIndex("resourceId", "resourceId", { unique: false });
+        console.log("✓ Created phrasal_patterns store");
       }
     };
     request.onsuccess = () => resolve(request.result);
@@ -96,30 +105,78 @@ export async function bulkInsertFreq(entries) {
 export async function clearResourceData(resourceId) {
   const db = await initDB();
   return new Promise((resolve, reject) => {
-    const tx = db.transaction(["dict_entries", "freq_entries"], "readwrite");
+    // Include phrasal_patterns store for OCEAN data
+    const storeNames = ["dict_entries", "freq_entries"];
+    
+    // Check if phrasal_patterns store exists (for OCEAN)
+    if (db.objectStoreNames.contains("phrasal_patterns")) {
+      storeNames.push("phrasal_patterns");
+    }
+    
+    const tx = db.transaction(storeNames, "readwrite");
+    
+    let completedStores = 0;
+    const totalStores = storeNames.length;
+    
+    // Delete dict_entries
     const dictStore = tx.objectStore("dict_entries");
-    const freqStore = tx.objectStore("freq_entries");
-
     const idxD = dictStore.index("resourceTerm");
-    const idxF = freqStore.index("resourceTerm");
-
     const keyRange = IDBKeyRange.bound([resourceId, ""], [resourceId, "\uffff"]);
-
-    idxD.openCursor(keyRange).onsuccess = (ev) => {
+    
+    const reqD = idxD.openCursor(keyRange);
+    reqD.onsuccess = (ev) => {
       const cursor = ev.target.result;
       if (cursor) {
         cursor.delete();
         cursor.continue();
+      } else {
+        completedStores++;
+        console.log(`✓ Deleted dict_entries for resource ${resourceId}`);
+        if (completedStores === totalStores) {
+          console.log(`✓ All stores cleared for resource ${resourceId}`);
+        }
       }
     };
 
-    idxF.openCursor(keyRange).onsuccess = (ev) => {
+    // Delete freq_entries
+    const freqStore = tx.objectStore("freq_entries");
+    const idxF = freqStore.index("resourceTerm");
+    
+    const reqF = idxF.openCursor(keyRange);
+    reqF.onsuccess = (ev) => {
       const cursor = ev.target.result;
       if (cursor) {
         cursor.delete();
         cursor.continue();
+      } else {
+        completedStores++;
+        console.log(`✓ Deleted freq_entries for resource ${resourceId}`);
+        if (completedStores === totalStores) {
+          console.log(`✓ All stores cleared for resource ${resourceId}`);
+        }
       }
     };
+
+    // Delete phrasal_patterns (OCEAN data)
+    if (storeNames.includes("phrasal_patterns")) {
+      const phrasalStore = tx.objectStore("phrasal_patterns");
+      const idxP = phrasalStore.index("resourceId");
+      
+      const reqP = idxP.openCursor(IDBKeyRange.only(resourceId));
+      reqP.onsuccess = (ev) => {
+        const cursor = ev.target.result;
+        if (cursor) {
+          cursor.delete();
+          cursor.continue();
+        } else {
+          completedStores++;
+          console.log(`✓ Deleted phrasal_patterns for resource ${resourceId}`);
+          if (completedStores === totalStores) {
+            console.log(`✓ All stores cleared for resource ${resourceId}`);
+          }
+        }
+      };
+    }
 
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);

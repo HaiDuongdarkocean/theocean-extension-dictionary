@@ -3,6 +3,7 @@ import {
   normalizeMigakuDictEntry,
   normalizeMigakuFreq,
 } from "../normalizer.js";
+import { migratePhrasalPatterns } from "../oceanMigration.js";
 
 export class MigakuImporter extends BaseImporter {
   async import() {
@@ -39,6 +40,26 @@ export class MigakuImporter extends BaseImporter {
       normalizeMigakuDictEntry(row, this.resourceId),
     );
     await this.saveDictEntries(normalized);
+
+    // 🌊 OCEAN ENGINE: Migrate phrasal patterns
+    console.log("🌊 [IMPORTER] Starting OCEAN phrasal pattern migration...");
+    console.log("🌊 [IMPORTER] Total entries to process:", rows.length);
+    try {
+      const migrationResult = await migratePhrasalPatterns(
+        rows, 
+        this.resourceId,
+        (progress) => {
+          if (progress.phase === 'inserting') {
+            console.log(`🌊 [IMPORTER] Inserting: ${progress.inserted}/${progress.total}`);
+          } else {
+            console.log(`🌊 [IMPORTER] Processing: ${progress.processed}/${progress.total} (found: ${progress.found})`);
+          }
+        }
+      );
+      console.log(`✓ [IMPORTER] OCEAN migration complete:`, migrationResult);
+    } catch (err) {
+      console.error("⚠️ [IMPORTER] OCEAN migration failed (non-critical):", err);
+    }
 
     return { resourceId: this.resourceId, kind: "dictionary", count: normalized.length };
   }

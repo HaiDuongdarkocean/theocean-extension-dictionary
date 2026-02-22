@@ -873,7 +873,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(0, 0, 0, 0.2);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -995,6 +995,15 @@
   font-family: monospace;
 }
 
+.yomi-note-id[style*="cursor: pointer"] {
+  color: var(--yomi-primary) !important;
+  text-decoration: underline !important;
+}
+
+.yomi-note-id[style*="cursor: pointer"]:hover {
+  opacity: 0.8 !important;
+}
+
 .yomi-note-deck {
   font-size: 11px;
   color: var(--yomi-text-sub);
@@ -1055,3 +1064,83 @@
   border-color: var(--yomi-border);
 }
 
+
+
+/* 🌊 OCEAN ENGINE - Phrasal Verbs & Idioms Styling */
+
+.ocean-phrasal-block {
+  background: linear-gradient(135deg, rgba(8, 102, 255, 0.05) 0%, rgba(0, 192, 165, 0.05) 100%);
+  border-left: 3px solid var(--yomi-accent);
+  margin-bottom: 12px;
+}
+
+.ocean-type-badge {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.ocean-type-badge.phrasal {
+  background: linear-gradient(135deg, #0866ff 0%, #00c0a5 100%);
+  color: white;
+}
+
+.ocean-type-badge.single {
+  background: var(--yomi-surface);
+  color: var(--yomi-text-sub);
+  border: 1px solid var(--yomi-border);
+}
+
+.ocean-phrasal-indicator {
+  background: var(--yomi-primary-soft);
+  padding: 8px 12px;
+  border-radius: 8px;
+  margin-bottom: 10px;
+  font-size: 13px;
+  color: var(--yomi-primary);
+  border-left: 3px solid var(--yomi-primary);
+}
+
+.ocean-context-info {
+  background: var(--yomi-surface);
+  padding: 8px 12px;
+  border-radius: 8px;
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--yomi-text-sub);
+  font-style: italic;
+  border-left: 2px solid var(--yomi-accent);
+}
+
+.ocean-context-info i {
+  color: var(--yomi-text-main);
+  font-weight: 500;
+}
+
+.ocean-atom {
+  margin-bottom: 8px;
+  line-height: 1.6;
+}
+
+.ocean-atom b {
+  color: var(--yomi-primary);
+  font-weight: 600;
+  margin-right: 6px;
+}
+
+/* Dark mode adjustments */
+@media (prefers-color-scheme: dark) {
+  .ocean-phrasal-block {
+    background: linear-gradient(135deg, rgba(62, 166, 255, 0.08) 0%, rgba(0, 192, 165, 0.08) 100%);
+  }
+  
+  .ocean-type-badge.single {
+    background: var(--yomi-surface);
+    color: var(--yomi-text-sub);
+  }
+}

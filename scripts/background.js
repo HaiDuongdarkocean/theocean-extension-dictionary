@@ -5,9 +5,74 @@ import { translateText } from "./TranslateModule.js";
 import { getConfig, saveConfig } from "./configManager.js";
 import { TTSModule } from "./ttsModule.js";
 import { lookupTermWithFreq } from "./storage.js";
+import { importDictionary, importFrequencyList } from "./importManager.js";
 
 
 console.log("Background Service Worker đang chạy...");
+
+// Auto-import dictionaries and frequency lists on first install
+chrome.runtime.onInstalled.addListener(async (details) => {
+  if (details.reason === "install") {
+    console.log("🎉 Extension installed for the first time! Starting auto-import...");
+    
+    try {
+      // Import dictionaries
+      const dictionaryFiles = [
+        "data/Dictionary/Cambridge Dictionary.json",
+        "data/Dictionary/Eng-Vi Dictionary.json"
+      ];
+      
+      for (const filePath of dictionaryFiles) {
+        try {
+          const response = await fetch(chrome.runtime.getURL(filePath));
+          const data = await response.json();
+          await importDictionary(data, filePath);
+          console.log(`✅ Auto-imported: ${filePath}`);
+        } catch (err) {
+          console.error(`❌ Failed to import ${filePath}:`, err);
+        }
+      }
+      
+      // Import frequency list
+      try {
+        const freqPath = "data/Frequency_Eng/En-Wiki Frequency List.json";
+        const response = await fetch(chrome.runtime.getURL(freqPath));
+        const data = await response.json();
+        await importFrequencyList(data);
+        console.log(`✅ Auto-imported: ${freqPath}`);
+      } catch (err) {
+        console.error(`❌ Failed to import frequency list:`, err);
+      }
+      
+      // Setup default other dictionaries
+      const config = await getConfig();
+      if (!config.otherDictionaries || config.otherDictionaries.length === 0) {
+        const defaultDictionaries = [
+          {
+            name: "Cambridge Dictionary",
+            url: "https://dictionary.cambridge.org/dictionary/english/{term}",
+            enabled: true
+          },
+          {
+            name: "Oxford Learner's Dictionary",
+            url: "https://www.oxfordlearnersdictionaries.com/definition/english/{term}",
+            enabled: true
+          }
+        ];
+        
+        await saveConfig({
+          ...config,
+          otherDictionaries: defaultDictionaries
+        });
+        console.log("✅ Setup default other dictionaries");
+      }
+      
+      console.log("🎊 Auto-import completed!");
+    } catch (err) {
+      console.error("❌ Auto-import failed:", err);
+    }
+  }
+});
 
 async function fetchWithTimeout(url, options = {}, timeoutMs = 5000) {
   const controller = new AbortController();

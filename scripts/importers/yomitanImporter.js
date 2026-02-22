@@ -3,6 +3,7 @@ import {
   normalizeYomitanDictEntry,
   normalizeYomitanFreq,
 } from "../normalizer.js";
+import { migrateYomitanFormat } from "../oceanMigration.js";
 
 export class YomitanImporter extends BaseImporter {
   async import() {
@@ -46,6 +47,8 @@ export class YomitanImporter extends BaseImporter {
     await this.saveResourceMeta({ ...meta, stats: { entryCount: 0 } });
 
     let total = 0;
+    const allTermBankRows = []; // Collect all rows for OCEAN migration
+    
     for (const name of termBanks) {
       const raw = JSON.parse(await zip.file(name).async("string"));
       const normalized = raw.map((row) =>
@@ -53,9 +56,32 @@ export class YomitanImporter extends BaseImporter {
       );
       await this.saveDictEntries(normalized);
       total += normalized.length;
+      
+      // Collect raw rows for OCEAN
+      allTermBankRows.push(...raw);
     }
 
     await this.saveResourceMeta({ ...meta, stats: { entryCount: total } });
+
+    // 🌊 OCEAN ENGINE: Migrate phrasal patterns
+    console.log("🌊 Starting OCEAN phrasal pattern migration for Yomitan...");
+    try {
+      const migrationResult = await migrateYomitanFormat(
+        allTermBankRows,
+        this.resourceId,
+        (progress) => {
+          if (progress.phase === 'inserting') {
+            console.log(`🌊 Inserting: ${progress.inserted}/${progress.total}`);
+          } else {
+            console.log(`🌊 Processing: ${progress.processed}/${progress.total} (found: ${progress.found})`);
+          }
+        }
+      );
+      console.log(`✓ OCEAN migration complete:`, migrationResult);
+    } catch (err) {
+      console.error("⚠️ OCEAN migration failed (non-critical):", err);
+    }
+
     return { resourceId: this.resourceId, kind: "dictionary", count: total };
   }
 

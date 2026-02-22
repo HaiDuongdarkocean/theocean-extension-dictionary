@@ -97,7 +97,8 @@ async function setupAnkiPanel() {
     // Sự kiện khi thay đổi Model thì phải load lại danh sách field của Model đó
     modelSelect.onchange = async (e) => {
       const fields = await getModelFieldNames(e.target.value);
-      renderFieldMappingTable(fields, {});
+      const autoMapping = autoMapFields(fields);
+      renderFieldMappingTable(fields, autoMapping);
     };
 
     ankiStatus.innerText = "💚 Kết nối Anki thành công";
@@ -137,6 +138,49 @@ function renderFieldMappingTable(modelFields, savedMapping) {
     row.appendChild(select);
     container.appendChild(row);
   });
+}
+
+// Auto-mapping function: match extension fields to Anki model fields
+function autoMapFields(modelFields) {
+  const mapping = {};
+  
+  // Mapping rules: extension field -> possible Anki field names (case-insensitive)
+  const mappingRules = {
+    "Target word": ["word", "target", "target word", "front", "expression", "vocabulary", "term"],
+    "Definition": ["definition", "meaning", "back", "translation", "gloss"],
+    "Sentence": ["sentence", "example", "context", "example sentence"],
+    "Sentence translation": ["sentence translation", "translation", "sentence meaning", "example translation"],
+    "Images": ["image", "images", "picture", "pictures", "photo"],
+    "Word audio": ["word audio", "audio", "pronunciation", "sound", "word sound"],
+    "Sentence audio": ["sentence audio", "example audio", "sentence sound"]
+  };
+  
+  EXTENSION_FIELDS.forEach(extField => {
+    const rules = mappingRules[extField] || [];
+    
+    // Try exact match first (case-insensitive)
+    for (const rule of rules) {
+      const match = modelFields.find(mf => mf.toLowerCase() === rule.toLowerCase());
+      if (match) {
+        mapping[extField] = match;
+        return;
+      }
+    }
+    
+    // Try partial match (contains)
+    for (const rule of rules) {
+      const match = modelFields.find(mf => 
+        mf.toLowerCase().includes(rule.toLowerCase()) || 
+        rule.toLowerCase().includes(mf.toLowerCase())
+      );
+      if (match) {
+        mapping[extField] = match;
+        return;
+      }
+    }
+  });
+  
+  return mapping;
 }
 
 // --- 4. QUẢN LÝ AUDIO & TTS PANEL ---
@@ -183,29 +227,118 @@ async function setupAudioPanel() {
     .sort((a, b) => (a.voiceName || "").localeCompare(b.voiceName || ""));
 
   // Voice options for TTS slots should prioritize saved list.
-  const voiceOptionsForSlots = (() => {
+  let voiceOptionsForSlots = (() => {
     const selected = alphabeticalVoices.filter((v) =>
       savedVoiceMap.has(v.voiceName),
     );
     return selected.length > 0 ? selected : alphabeticalVoices;
   })();
 
-  const populateVoice = (selectId, currentVoice) => {
-    const select = document.getElementById(selectId);
-    if (!select) return;
-    select.innerHTML =
-      '<option value="">-- Mặc định hệ thống --</option>' +
-      voiceOptionsForSlots
-        .map(
-          (v) =>
-            `<option value="${v.voiceName}" ${v.voiceName === currentVoice ? "selected" : ""}>${v.voiceName} (${v.lang})</option>`,
-        )
-        .join("");
-  };
+  // Get current voice selections from config
+  const currentVoices = [
+    config.tts?.voices?.[0] || "",
+    config.tts?.voices?.[1] || "",
+    config.tts?.voices?.[2] || ""
+  ];
 
-  populateVoice("voice1", config.tts?.voices?.[0]);
-  populateVoice("voice2", config.tts?.voices?.[1]);
-  populateVoice("voice3", config.tts?.voices?.[2]);
+  const voiceSelectionEl = document.getElementById("ttsVoiceSelection");
+  const audioSaveStatusEl = document.getElementById("audioSaveStatus");
+
+  function renderVoiceSelection() {
+    if (!voiceSelectionEl) return;
+    
+    if (voiceOptionsForSlots.length === 0) {
+      voiceSelectionEl.innerHTML = '<div style="padding: 20px; text-align: center; color: #999;">No voices available. Save voices in TTS Tester first.</div>';
+      return;
+    }
+
+    voiceSelectionEl.innerHTML = voiceOptionsForSlots
+      .map((v, idx) => {
+        const slotIndex = currentVoices.indexOf(v.voiceName);
+        const isSlot1 = slotIndex === 0;
+        const isSlot2 = slotIndex === 1;
+        const isSlot3 = slotIndex === 2;
+        
+        return `
+          <div class="voice-selection-item">
+            <button class="btn voice-play-btn" type="button" data-play-voice="${v.voiceName}">Play</button>
+            <div class="voice-selection-slots">
+              <label title="Voice 1">
+                <input type="radio" name="voice-slot-1" value="${v.voiceName}" ${isSlot1 ? "checked" : ""}>
+                <span>1</span>
+              </label>
+              <label title="Voice 2">
+                <input type="radio" name="voice-slot-2" value="${v.voiceName}" ${isSlot2 ? "checked" : ""}>
+                <span>2</span>
+              </label>
+              <label title="Voice 3">
+                <input type="radio" name="voice-slot-3" value="${v.voiceName}" ${isSlot3 ? "checked" : ""}>
+                <span>3</span>
+              </label>
+            </div>
+            <div class="voice-selection-info">
+              <span class="voice-selection-name">${v.voiceName}</span>
+              <span class="voice-selection-lang">${v.lang}</span>
+            </div>
+          </div>
+        `;
+      })
+      .join("");
+
+    // Add event listeners for play buttons
+    voiceSelectionEl.querySelectorAll(".voice-play-btn").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        const voiceName = btn.getAttribute("data-play-voice");
+        const text = textInput?.value?.trim() || "Hello, this is a test.";
+        await new Promise((resolve) => {
+          chrome.tts.speak(text, {
+            voiceName: voiceName,
+            onEvent: (e) => {
+              if (e.type === "end" || e.type === "error") resolve();
+            },
+          });
+        });
+      });
+    });
+
+    // Add event listeners for radio buttons
+    voiceSelectionEl.querySelectorAll("input[type='radio']").forEach(radio => {
+      radio.addEventListener("change", async () => {
+        if (!radio.checked) return;
+        
+        // Get all selected voices
+        const voice1 = document.querySelector("input[name='voice-slot-1']:checked")?.value || "";
+        const voice2 = document.querySelector("input[name='voice-slot-2']:checked")?.value || "";
+        const voice3 = document.querySelector("input[name='voice-slot-3']:checked")?.value || "";
+        
+        // Update config
+        const current = await getConfig();
+        const next = {
+          ...current,
+          tts: {
+            ...(current.tts || {}),
+            voices: [voice1, voice2, voice3].filter(v => v)
+          },
+        };
+        await saveConfig(next);
+        
+        // Update current selections
+        currentVoices[0] = voice1;
+        currentVoices[1] = voice2;
+        currentVoices[2] = voice3;
+        
+        if (audioSaveStatusEl) {
+          audioSaveStatusEl.textContent = "Saved";
+          audioSaveStatusEl.style.color = "green";
+          setTimeout(() => {
+            audioSaveStatusEl.textContent = "";
+          }, 2000);
+        }
+      });
+    });
+  }
+
+  renderVoiceSelection();
 
   const voiceListEl = document.getElementById("ttsVoiceList");
   const clearBtn = document.getElementById("ttsClearSelection");
@@ -215,6 +348,7 @@ async function setupAudioPanel() {
   const downloadZipBtn = document.getElementById("ttsDownloadZipBtn");
   const statusEl = document.getElementById("ttsTestStatus");
   const textInput = document.getElementById("ttsTestText");
+  const countryFilter = document.getElementById("ttsCountryFilter");
 
   let testerVoices = alphabeticalVoices.map((voice, index) => {
     const saved = savedVoiceMap.get(voice.voiceName);
@@ -227,6 +361,84 @@ async function setupAudioPanel() {
     };
   });
 
+  // Extract unique countries from voices
+  const countries = new Set();
+  testerVoices.forEach(v => {
+    const country = v.lang.split('-')[0]; // Extract language code (e.g., "en" from "en-US")
+    countries.add(country);
+  });
+
+  // Populate country filter dropdown
+  if (countryFilter) {
+    const sortedCountries = Array.from(countries).sort();
+    countryFilter.innerHTML = '<option value="">All countries</option>' +
+      sortedCountries.map(country => {
+        const countryName = getCountryName(country);
+        return `<option value="${country}">${countryName} (${country})</option>`;
+      }).join('');
+  }
+
+  let currentCountryFilter = "";
+
+  function getCountryName(code) {
+    const names = {
+      'en': 'English',
+      'es': 'Spanish',
+      'fr': 'French',
+      'de': 'German',
+      'it': 'Italian',
+      'pt': 'Portuguese',
+      'ru': 'Russian',
+      'ja': 'Japanese',
+      'ko': 'Korean',
+      'zh': 'Chinese',
+      'ar': 'Arabic',
+      'hi': 'Hindi',
+      'nl': 'Dutch',
+      'pl': 'Polish',
+      'tr': 'Turkish',
+      'vi': 'Vietnamese',
+      'th': 'Thai',
+      'id': 'Indonesian',
+      'sv': 'Swedish',
+      'da': 'Danish',
+      'no': 'Norwegian',
+      'fi': 'Finnish',
+      'cs': 'Czech',
+      'el': 'Greek',
+      'he': 'Hebrew',
+      'hu': 'Hungarian',
+      'ro': 'Romanian',
+      'sk': 'Slovak',
+      'uk': 'Ukrainian',
+      'bg': 'Bulgarian',
+      'hr': 'Croatian',
+      'sr': 'Serbian',
+      'ca': 'Catalan',
+      'af': 'Afrikaans',
+      'bn': 'Bengali',
+      'ta': 'Tamil',
+      'te': 'Telugu',
+      'ml': 'Malayalam',
+      'kn': 'Kannada',
+      'mr': 'Marathi',
+      'gu': 'Gujarati',
+      'pa': 'Punjabi',
+      'ur': 'Urdu',
+      'fa': 'Persian',
+      'ms': 'Malay',
+      'fil': 'Filipino',
+      'sw': 'Swahili',
+      'am': 'Amharic',
+      'my': 'Burmese',
+      'km': 'Khmer',
+      'lo': 'Lao',
+      'si': 'Sinhala',
+      'ne': 'Nepali'
+    };
+    return names[code] || code.toUpperCase();
+  }
+
   function normalizeOrders() {
     testerVoices = testerVoices
       .slice()
@@ -236,10 +448,17 @@ async function setupAudioPanel() {
       .map((item, idx) => ({ ...item, order: idx + 1 }));
   }
 
+  function getFilteredVoices() {
+    if (!currentCountryFilter) return testerVoices;
+    return testerVoices.filter(v => v.lang.startsWith(currentCountryFilter + '-') || v.lang === currentCountryFilter);
+  }
+
   function renderTesterVoices() {
     if (!voiceListEl) return;
     normalizeOrders();
-    voiceListEl.innerHTML = testerVoices
+    const filteredVoices = getFilteredVoices();
+    
+    voiceListEl.innerHTML = filteredVoices
       .map(
         (v) => `
         <div class="voice-item" draggable="true" data-voice="${v.voiceName}">
@@ -255,6 +474,11 @@ async function setupAudioPanel() {
         `,
       )
       .join("");
+    
+    if (filteredVoices.length === 0) {
+      voiceListEl.innerHTML = '<div style="padding: 20px; text-align: center; color: #999;">No voices found for this country</div>';
+    }
+    
     updateSelectionCount();
     bindVoiceDragDrop();
   }
@@ -271,6 +495,14 @@ async function setupAudioPanel() {
     const checked = testerVoices.filter((v) => v.selected).length;
     if (clearBtn) clearBtn.textContent = `Delete selection (${checked})`;
   };
+
+  // Country filter change handler
+  if (countryFilter) {
+    countryFilter.addEventListener('change', (e) => {
+      currentCountryFilter = e.target.value;
+      renderTesterVoices();
+    });
+  }
 
   voiceListEl?.addEventListener("change", (event) => {
     const checkbox = event.target.closest(".tts-voice-checkbox");
@@ -407,6 +639,15 @@ async function setupAudioPanel() {
       },
     };
     await saveConfig(next);
+    
+    // Update voiceOptionsForSlots with new saved voices
+    voiceOptionsForSlots = alphabeticalVoices.filter((v) =>
+      selected.some(s => s.voiceName === v.voiceName)
+    );
+    
+    // Re-render voice selection list
+    renderVoiceSelection();
+    
     if (statusEl) {
       statusEl.textContent = `Saved ${selected.length} voices`;
       statusEl.style.color = "green";
@@ -1178,6 +1419,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     console.log("Shortcut Panel load fail"),
   );
   await renderResources().catch((e) => console.log("Resource render fail", e));
+  await setupOceanTestPanel().catch((e) => console.log("OCEAN Test Panel load fail"));
 
   const autoSaveGeneral = debounce(
     () => saveGeneralSettings("dictionarySaveStatus"),
@@ -1264,3 +1506,269 @@ document.addEventListener("DOMContentLoaded", async () => {
   const btnLookupTest = document.getElementById("lookupTestBtn");
   if (btnLookupTest) btnLookupTest.onclick = () => handleLookupTest();
 });
+
+
+// ============================================
+// 🌊 OCEAN TEST PANEL
+// ============================================
+
+async function setupOceanTestPanel() {
+  console.log("🌊 Setting up OCEAN Test Panel...");
+
+  const testBtn = document.getElementById("oceanTestBtn");
+  const clearBtn = document.getElementById("oceanClearBtn");
+  const wordInput = document.getElementById("oceanTestWord");
+  const sentenceInput = document.getElementById("oceanTestSentence");
+  const resultDiv = document.getElementById("oceanTestResult");
+
+  // Test button handler
+  testBtn.addEventListener("click", async () => {
+    const word = wordInput.value.trim();
+    const sentence = sentenceInput.value.trim();
+
+    if (!word || !sentence) {
+      showOceanResult({
+        status: "error",
+        message: "Please enter both word and sentence"
+      });
+      return;
+    }
+
+    testBtn.disabled = true;
+    testBtn.textContent = "Testing...";
+
+    try {
+      // Check if OCEAN is loaded
+      if (!window.oceanMatcher) {
+        showOceanResult({
+          status: "error",
+          message: "OCEAN Engine not loaded",
+          details: "Make sure you've imported a dictionary with phrasal patterns."
+        });
+        return;
+      }
+
+      const { findPhrasalMatch } = window.oceanMatcher;
+      const result = await findPhrasalMatch(word, sentence);
+
+      if (result && result.status === "success") {
+        showOceanResult({
+          status: "success",
+          word: word,
+          sentence: sentence,
+          match: result.data
+        });
+      } else {
+        showOceanResult({
+          status: "no_match",
+          word: word,
+          sentence: sentence,
+          message: "No phrasal pattern matched"
+        });
+      }
+    } catch (error) {
+      console.error("OCEAN test error:", error);
+      showOceanResult({
+        status: "error",
+        message: "Test failed",
+        details: error.message
+      });
+    } finally {
+      testBtn.disabled = false;
+      testBtn.textContent = "🔍 Test Match";
+    }
+  });
+
+  // Clear button handler
+  clearBtn.addEventListener("click", () => {
+    wordInput.value = "";
+    sentenceInput.value = "";
+    resultDiv.classList.remove("show");
+    resultDiv.innerHTML = "";
+  });
+
+  // Example click handlers
+  const examples = document.querySelectorAll(".ocean-example");
+  examples.forEach(example => {
+    example.addEventListener("click", () => {
+      const word = example.getAttribute("data-word");
+      const sentence = example.getAttribute("data-sentence");
+      wordInput.value = word;
+      sentenceInput.value = sentence;
+      
+      // Scroll to test form
+      document.querySelector(".ocean-test-card").scrollIntoView({ 
+        behavior: "smooth", 
+        block: "start" 
+      });
+    });
+  });
+
+  // Debug button handlers
+  document.getElementById("oceanCheckStatusBtn").addEventListener("click", async () => {
+    if (window.oceanDebug) {
+      await window.oceanDebug.checkStatus();
+      logToOceanConsole("✅ Check console (F12) for detailed status");
+    } else {
+      logToOceanConsole("❌ oceanDebug not available");
+    }
+  });
+
+  document.getElementById("oceanTestBeBtn").addEventListener("click", async () => {
+    if (window.oceanDebug && window.oceanDebug.testBeLemmatization) {
+      await window.oceanDebug.testBeLemmatization();
+      logToOceanConsole("✅ Check console (F12) for test results");
+    } else {
+      logToOceanConsole("❌ oceanDebug.testBeLemmatization not available");
+    }
+  });
+
+  document.getElementById("oceanCheckAnchorBtn").addEventListener("click", async () => {
+    if (window.oceanDebug) {
+      await window.oceanDebug.checkAnchor("be");
+      logToOceanConsole("✅ Check console (F12) for anchor patterns");
+    } else {
+      logToOceanConsole("❌ oceanDebug not available");
+    }
+  });
+
+  document.getElementById("oceanRunAllTestsBtn").addEventListener("click", async () => {
+    if (window.oceanDebug) {
+      await window.oceanDebug.runTests();
+      logToOceanConsole("✅ Check console (F12) for all test results");
+    } else {
+      logToOceanConsole("❌ oceanDebug not available");
+    }
+  });
+
+  // Test compile button - test regex compilation directly
+  document.getElementById("oceanTestCompileBtn")?.addEventListener("click", () => {
+    if (!window.oceanCompiler) {
+      logToOceanConsole("❌ oceanCompiler not available");
+      return;
+    }
+
+    const testTerms = [
+      "be (right) under your nose",
+      "hand sth back",
+      "a big/great girl's blouse"
+    ];
+
+    logToOceanConsole("🧪 Testing regex compilation:");
+    testTerms.forEach(term => {
+      const compiled = window.oceanCompiler.compilePhrasalPattern(term);
+      logToOceanConsole(`\n📝 "${term}"`);
+      logToOceanConsole(`   → ${compiled}`);
+    });
+  });
+
+  console.log("✅ OCEAN Test Panel ready");
+}
+
+function showOceanResult(data) {
+  const resultDiv = document.getElementById("oceanTestResult");
+  resultDiv.classList.add("show");
+
+  if (data.status === "success") {
+    resultDiv.innerHTML = `
+      <div class="ocean-result__header">
+        <div class="ocean-result__status">✅</div>
+        <div>
+          <h3 class="ocean-result__title">Phrasal Pattern Matched!</h3>
+          <p class="ocean-result__subtitle">OCEAN detected a phrasal verb or idiom</p>
+        </div>
+      </div>
+      <div class="ocean-result__body">
+        <div class="ocean-result__row">
+          <div class="ocean-result__label">Target Word:</div>
+          <div class="ocean-result__value"><code>${escapeHtml(data.word)}</code></div>
+        </div>
+        <div class="ocean-result__row">
+          <div class="ocean-result__label">Matched Pattern:</div>
+          <div class="ocean-result__value">
+            <span class="ocean-result__badge">📘 PHRASAL</span>
+            <strong>${escapeHtml(data.match.term)}</strong>
+          </div>
+        </div>
+        <div class="ocean-result__row">
+          <div class="ocean-result__label">Detected in Text:</div>
+          <div class="ocean-result__value">
+            <div class="ocean-result__detected">"${escapeHtml(data.match.detectedInSentence)}"</div>
+          </div>
+        </div>
+        <div class="ocean-result__row">
+          <div class="ocean-result__label">Definition:</div>
+          <div class="ocean-result__value">
+            <div class="ocean-result__definition">${data.match.definition || "No definition available"}</div>
+          </div>
+        </div>
+        ${data.match.pronunciation ? `
+        <div class="ocean-result__row">
+          <div class="ocean-result__label">Pronunciation:</div>
+          <div class="ocean-result__value">${escapeHtml(data.match.pronunciation)}</div>
+        </div>
+        ` : ''}
+      </div>
+    `;
+  } else if (data.status === "no_match") {
+    resultDiv.innerHTML = `
+      <div class="ocean-result__header">
+        <div class="ocean-result__status">ℹ️</div>
+        <div>
+          <h3 class="ocean-result__title">No Phrasal Pattern Found</h3>
+          <p class="ocean-result__subtitle">This might be a single word or no pattern exists</p>
+        </div>
+      </div>
+      <div class="ocean-result__body">
+        <div class="ocean-result__row">
+          <div class="ocean-result__label">Target Word:</div>
+          <div class="ocean-result__value"><code>${escapeHtml(data.word)}</code></div>
+        </div>
+        <div class="ocean-result__row">
+          <div class="ocean-result__label">Sentence:</div>
+          <div class="ocean-result__value">"${escapeHtml(data.sentence)}"</div>
+        </div>
+        <div class="ocean-result__row">
+          <div class="ocean-result__label">Suggestion:</div>
+          <div class="ocean-result__value">
+            • Check if the word is spelled correctly<br>
+            • Try a different sentence context<br>
+            • The pattern might not exist in your dictionary
+          </div>
+        </div>
+      </div>
+    `;
+  } else if (data.status === "error") {
+    resultDiv.innerHTML = `
+      <div class="ocean-result__header">
+        <div class="ocean-result__status">❌</div>
+        <div>
+          <h3 class="ocean-result__title">Error</h3>
+          <p class="ocean-result__subtitle">${escapeHtml(data.message)}</p>
+        </div>
+      </div>
+      ${data.details ? `
+      <div class="ocean-result__body">
+        <div class="ocean-result__row">
+          <div class="ocean-result__label">Details:</div>
+          <div class="ocean-result__value"><code>${escapeHtml(data.details)}</code></div>
+        </div>
+      </div>
+      ` : ''}
+    `;
+  }
+}
+
+function logToOceanConsole(message) {
+  const consoleDiv = document.getElementById("oceanConsoleOutput");
+  const timestamp = new Date().toLocaleTimeString();
+  const line = `[${timestamp}] ${message}\n`;
+  consoleDiv.textContent += line;
+  consoleDiv.scrollTop = consoleDiv.scrollHeight;
+}
+
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}

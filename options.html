@@ -8,6 +8,10 @@
   </head>
   <body>
     <script src="scripts/vendor.jszip.min.js"></script>
+    <script src="scripts/irregularData.js"></script>
+    <script src="scripts/regularRules.js"></script>
+    <script src="scripts/oceanBundle.js"></script>
+    <script src="scripts/oceanDebug.js"></script>
     <script src="scripts/shortcuts.js"></script>
     <div class="app">
       <div class="app__inner">
@@ -24,6 +28,7 @@
           <button class="nav__btn" data-panel="imagesPanel" type="button">Images</button>
           <button class="nav__btn" data-panel="audioPanel" type="button">Audio</button>
           <button class="nav__btn" data-panel="otherDictPanel" type="button">Other Dictionary</button>
+          <button class="nav__btn" data-panel="oceanTestPanel" type="button">🌊 OCEAN Test</button>
         </div>
       </aside>
 
@@ -405,17 +410,11 @@
                   </div>
                 </div>
 
-                <div class="row">
-                  <div class="row__label">Voice 1</div>
-                  <div class="row__control"><select id="voice1"></select></div>
-                </div>
-                <div class="row">
-                  <div class="row__label">Voice 2</div>
-                  <div class="row__control"><select id="voice2"></select></div>
-                </div>
-                <div class="row">
-                  <div class="row__label">Voice 3</div>
-                  <div class="row__control"><select id="voice3"></select></div>
+                <div class="row tts-flex-row">
+                  <div class="row__label">Voice selection</div>
+                  <div class="row__control">
+                    <div id="ttsVoiceSelection" class="voice-selection-list"></div>
+                  </div>
                 </div>
 
                 <div class="row">
@@ -445,6 +444,15 @@
                   <div class="row__label">Sentence</div>
                   <div class="row__control">
                     <textarea id="ttsTestText" rows="2" placeholder="Type a sentence to test"></textarea>
+                  </div>
+                </div>
+
+                <div class="row">
+                  <div class="row__label">Filter by country</div>
+                  <div class="row__control">
+                    <select id="ttsCountryFilter">
+                      <option value="">All countries</option>
+                    </select>
                   </div>
                 </div>
 
@@ -504,6 +512,146 @@
                 <p class="hint" style="margin-top:10px;"><strong>Example:</strong></p>
                 <p class="hint">https://dictionary.cambridge.org/dictionary/english/{term}</p>
                 <p class="hint">https://www.oxfordlearnersdictionaries.com/definition/english/{term}</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="oceanTestPanel" class="panel">
+          <div class="panel__header">
+            <div>
+              <h1 class="panel__title">🌊 OCEAN Engine Test</h1>
+              <p class="panel__desc">Test phrasal verb and idiom detection with custom sentences.</p>
+            </div>
+          </div>
+
+          <div class="grid">
+            <!-- Quick Test Card -->
+            <div class="card ocean-test-card">
+              <div class="card__header">
+                <h2 class="card__title">Quick Test</h2>
+              </div>
+              <div class="card__body">
+                <div class="row">
+                  <div class="row__label">Target Word</div>
+                  <div class="row__control">
+                    <input type="text" id="oceanTestWord" placeholder="e.g., was, were, handed" value="was" />
+                  </div>
+                </div>
+
+                <div class="row">
+                  <div class="row__label">Sentence</div>
+                  <div class="row__control">
+                    <textarea id="oceanTestSentence" rows="3" placeholder="Enter a sentence containing the target word">I spent all morning looking for the book, and it was right under my nose the whole time.</textarea>
+                  </div>
+                </div>
+
+                <div class="actions">
+                  <button class="btn btn--primary" id="oceanTestBtn" type="button">🔍 Test Match</button>
+                  <button class="btn" id="oceanClearBtn" type="button">Clear</button>
+                </div>
+
+                <div id="oceanTestResult" class="ocean-result"></div>
+              </div>
+            </div>
+
+            <!-- Preset Examples Card -->
+            <div class="card ocean-examples-card">
+              <div class="card__header">
+                <h2 class="card__title">Preset Examples</h2>
+              </div>
+              <div class="card__body">
+                <p class="hint">Click an example to load it into the test form:</p>
+                
+                <div class="ocean-example-list">
+                  <div class="ocean-example" data-word="was" data-sentence="I spent all morning looking for the book, and it was right under my nose the whole time.">
+                    <div class="ocean-example__header">
+                      <span class="ocean-example__badge">be under nose</span>
+                      <span class="ocean-example__word">was</span>
+                    </div>
+                    <div class="ocean-example__sentence">I spent all morning looking for the book, and it <mark>was</mark> right under my nose the whole time.</div>
+                    <div class="ocean-example__expected">Expected: "be (right) under your nose"</div>
+                  </div>
+
+                  <div class="ocean-example" data-word="were" data-sentence="They were right under my nose on the desk.">
+                    <div class="ocean-example__header">
+                      <span class="ocean-example__badge">be under nose</span>
+                      <span class="ocean-example__word">were</span>
+                    </div>
+                    <div class="ocean-example__sentence">They <mark>were</mark> right under my nose on the desk.</div>
+                    <div class="ocean-example__expected">Expected: "be (right) under your nose"</div>
+                  </div>
+
+                  <div class="ocean-example" data-word="handed" data-sentence="He handed the old photograph back to her with a smile.">
+                    <div class="ocean-example__header">
+                      <span class="ocean-example__badge">hand back</span>
+                      <span class="ocean-example__word">handed</span>
+                    </div>
+                    <div class="ocean-example__sentence">He <mark>handed</mark> the old photograph back to her with a smile.</div>
+                    <div class="ocean-example__expected">Expected: "hand sth back"</div>
+                  </div>
+
+                  <div class="ocean-example" data-word="handed" data-sentence="She handed in her term paper late yesterday.">
+                    <div class="ocean-example__header">
+                      <span class="ocean-example__badge">hand in</span>
+                      <span class="ocean-example__word">handed</span>
+                    </div>
+                    <div class="ocean-example__sentence">She <mark>handed</mark> in her term paper late yesterday.</div>
+                    <div class="ocean-example__expected">Expected: "hand sth in"</div>
+                  </div>
+
+                  <div class="ocean-example" data-word="is" data-sentence="The solution is right under your nose if you look carefully.">
+                    <div class="ocean-example__header">
+                      <span class="ocean-example__badge">be under nose</span>
+                      <span class="ocean-example__word">is</span>
+                    </div>
+                    <div class="ocean-example__sentence">The solution <mark>is</mark> right under your nose if you look carefully.</div>
+                    <div class="ocean-example__expected">Expected: "be (right) under your nose"</div>
+                  </div>
+
+                  <div class="ocean-example" data-word="are" data-sentence="The keys are under your nose on the table.">
+                    <div class="ocean-example__header">
+                      <span class="ocean-example__badge">be under nose</span>
+                      <span class="ocean-example__word">are</span>
+                    </div>
+                    <div class="ocean-example__sentence">The keys <mark>are</mark> under your nose on the table.</div>
+                    <div class="ocean-example__expected">Expected: "be (right) under your nose"</div>
+                  </div>
+
+                  <div class="ocean-example" data-word="was" data-sentence="If you are wise, you was ruled by your father.">
+                    <div class="ocean-example__header">
+                      <span class="ocean-example__badge">be ruled by</span>
+                      <span class="ocean-example__word">was</span>
+                    </div>
+                    <div class="ocean-example__sentence">If you are wise, you <mark>was</mark> ruled by your father.</div>
+                    <div class="ocean-example__expected">Expected: "be ruled by your father"</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Debug Panel Card -->
+            <div class="card ocean-debug-card">
+              <div class="card__header">
+                <h2 class="card__title">Debug Commands</h2>
+              </div>
+              <div class="card__body">
+                <p class="hint">Run diagnostic commands (results in browser console):</p>
+                
+                <div class="ocean-debug-buttons">
+                  <button class="btn" id="oceanCheckStatusBtn" type="button">📊 Check Status</button>
+                  <button class="btn" id="oceanTestBeBtn" type="button">🧪 Test "be" Lemmatization</button>
+                  <button class="btn" id="oceanCheckAnchorBtn" type="button">🔍 Check Anchor "be"</button>
+                  <button class="btn" id="oceanRunAllTestsBtn" type="button">🚀 Run All Tests</button>
+                  <button class="btn" id="oceanTestCompileBtn" type="button">⚙️ Test Regex Compile</button>
+                </div>
+
+                <div class="ocean-console">
+                  <div class="ocean-console__header">Console Output</div>
+                  <div id="oceanConsoleOutput" class="ocean-console__content">
+                    Click a button above to see results...
+                  </div>
+                </div>
               </div>
             </div>
           </div>
