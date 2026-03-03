@@ -23,8 +23,6 @@
             ],
             "js": [
                 "scripts/sentenceExtractor.js",
-                "scripts/irregularData.js",
-                "scripts/regularRules.js",
                 "scripts/audioManager.js",
                 "scripts/shortcuts.js",
                 "scripts/oceanBundle.js",

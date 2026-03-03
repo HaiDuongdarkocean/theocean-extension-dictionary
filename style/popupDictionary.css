@@ -8,7 +8,8 @@
   --yomi-text-sub: #65676b;
   --yomi-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
   --yomi-border: rgba(0, 0, 0, 0.08);
-  --yomi-accent: #00c0a5; /* Màu xanh lá đặc trưng của Migaku cho từ vựng */
+  --yomi-accent: #00c0a5;
+  /* Màu xanh lá đặc trưng của Migaku cho từ vựng */
 }
 
 @media (prefers-color-scheme: dark) {
@@ -26,23 +27,23 @@
 }
 
 .yomitan-popup-stack {
-  position: fixed !important;
+  position: fixed;
   width: 320px;
-  background: var(--yomi-bg) !important;
-  border: 1px solid var(--yomi-border) !important;
-  border-radius: 12px !important;
-  box-shadow: var(--yomi-shadow) !important;
+  background: var(--yomi-bg);
+  border: 1px solid var(--yomi-border);
+  border-radius: 12px;
+  box-shadow: var(--yomi-shadow);
   font-family:
     "Roboto",
     -apple-system,
-    sans-serif !important;
-  overflow: hidden !important;
-  max-height: 80vh !important;
-  display: flex !important;
-  flex-direction: column !important;
+    sans-serif;
+  overflow: hidden;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
   animation: yomiPop 0.2s cubic-bezier(0.2, 0, 0.2, 1);
-  pointer-events: auto !important;
-  box-sizing: border-box !important;
+  pointer-events: auto;
+  box-sizing: border-box;
 }
 
 @keyframes yomiPop {
@@ -50,6 +51,7 @@
     opacity: 0;
     transform: scale(0.95) translateY(10px);
   }
+
   to {
     opacity: 1;
     transform: scale(1) translateY(0);
@@ -58,217 +60,210 @@
 
 /* Header kiểu Migaku: Từ vựng nổi bật */
 .yomi-header {
-  position: sticky !important;
-  top: 0 !important;
-  z-index: 10 !important;
-  padding: 0 !important;
-  background: linear-gradient(
-    to bottom,
-    var(--yomi-surface),
-    var(--yomi-bg)
-  ) !important;
-  border-bottom: 1px solid var(--yomi-border) !important;
-  flex-shrink: 0 !important;
-  display: flex !important;
-  flex-direction: column !important;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  padding: 0;
+  background: linear-gradient(to bottom,
+      var(--yomi-surface),
+      var(--yomi-bg));
+  border-bottom: 1px solid var(--yomi-border);
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 /* Row 1: Meta & Action */
 .yomi-header-row-1 {
-  display: flex !important;
-  justify-content: space-between !important;
-  align-items: center !important;
-  padding: 6px 6px 0 6px!important;
-  gap: 6px !important;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 6px 0 6px;
+  gap: 6px;
 }
 
 .yomi-pronunciation {
-  font-family: "Lucida Sans Unicode", sans-serif !important;
-  color: var(--yomi-text-sub) !important;
-  font-size: 12px !important;
-  font-style: italic !important;
-  flex: 0 1 auto !important;
+  font-family: "Lucida Sans Unicode", sans-serif;
+  color: var(--yomi-text-sub);
+  font-size: 12px;
+  font-style: italic;
+  flex: 0 1 auto;
 }
 
 .yomi-header-actions {
-  display: flex !important;
-  gap: 6px !important;
-  flex: 0 0 auto !important;
+  display: flex;
+  gap: 6px;
+  flex: 0 0 auto;
 }
 
 /* Row 2: Target Word */
 .yomi-header-row-2 {
-  padding: 2px 6px !important;
+  padding: 2px 6px;
 }
 
 .popup-term-title {
-  font-size: 24px !important;
-  font-weight: 700 !important;
-  color: var(--yomi-primary) !important;
-  display: block !important;
-  line-height: 1.2 !important;
-  word-break: break-word !important;
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--yomi-primary);
+  display: block;
+  line-height: 1.2;
+  word-break: break-word;
 }
 
 /* Row 3: Information */
 .yomi-header-row-3 {
-  padding: 2px 6px !important;
-  min-height: 20px !important;
+  padding: 2px 6px;
+  min-height: 20px;
 }
 
 .yomi-origin-note {
-  font-size: 12px !important;
-  color: var(--yomi-text-sub) !important;
-  font-style: italic !important;
-  display: block !important;
-  margin: 0 !important;
+  font-size: 12px;
+  color: var(--yomi-text-sub);
+  font-style: italic;
+  margin: 0;
+  margin-right: 8px;
 }
 
 .yomi-frequency {
-  font-size: 12px !important;
-  color: var(--yomi-text-sub) !important;
-  display: block !important;
-  margin: 0 !important;
+  font-size: 12px;
+  color: var(--yomi-text-sub);
+  margin: 0;
+  margin-right: 8px;
 }
 
 /* Row 4: Feedback Bar */
 .yomi-feedback-bar {
-  padding: 2px 6px !important;
-  min-height: 24px !important;
-  display: none !important;
-  align-items: center !important;
-  gap: 4px !important;
-  background: var(--yomi-surface) !important;
+  padding: 2px 6px;
+  min-height: 24px;
+  display: none;
+  align-items: center;
+  gap: 4px;
+  background: var(--yomi-surface);
 }
 
 .yomi-feedback-bar.is-visible {
-  display: flex !important;
+  display: flex;
 }
 
 .yomi-feedback-content {
-  display: flex !important;
-  align-items: center !important;
-  gap: 4px !important;
-  font-size: 13px !important;
-  line-height: 1.4 !important;
-  flex: 1 1 auto !important;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  line-height: 1.4;
+  flex: 1 1 auto;
 }
 
 .yomi-feedback-message {
-  color: var(--yomi-text-main) !important;
-  flex: 1 1 auto !important;
+  color: var(--yomi-text-main);
+  flex: 1 1 auto;
 }
 
 .yomi-feedback-message[style*="cursor: pointer"] {
-  color: var(--yomi-primary) !important;
-  font-weight: 600 !important;
+  color: var(--yomi-primary);
+  font-weight: 600;
 }
 
 .yomi-feedback-message[style*="cursor: pointer"]:hover {
-  opacity: 0.8 !important;
+  opacity: 0.8;
 }
 
 .yomi-feedback-link {
-  color: var(--yomi-primary) !important;
-  text-decoration: underline !important;
-  cursor: pointer !important;
-  font-weight: 600 !important;
-  white-space: nowrap !important;
-  flex: 0 0 auto !important;
+  color: var(--yomi-primary);
+  text-decoration: underline;
+  cursor: pointer;
+  font-weight: 600;
+  white-space: nowrap;
+  flex: 0 0 auto;
 }
 
 .yomi-feedback-link:hover {
-  opacity: 0.8 !important;
+  opacity: 0.8;
 }
 
 .yomi-feedback-success {
-  color: var(--yomi-text-main) !important;
+  color: var(--yomi-text-main);
 }
 
 .yomi-feedback-error {
-  color: #d32f2f !important;
+  color: #d32f2f;
 }
 
 .yomi-feedback-error .yomi-feedback-message {
-  color: #d32f2f !important;
+  color: #d32f2f;
 }
 
 /* Body: Typography sạch sẽ như YouTube */
 .definition-container {
-  padding: 6px 6px 6px !important;
-  overflow-y: auto !important;
-  overflow-x: hidden !important;
-  flex: 1 1 auto !important;
-  font-size: 15px !important;
-  line-height: 1.6 !important;
-  color: var(--yomi-text-main) !important;
+  padding: 6px 6px 6px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  flex: 1 1 auto;
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--yomi-text-main);
 }
 
 /* Kiểu dáng cho các tag như [noun], [verb] */
 .yomi-tag {
-  display: inline-block !important;
-  padding: 2px 6px !important;
-  background: var(--yomi-primary-soft) !important;
-  color: var(--yomi-primary) !important;
-  border-radius: 4px !important;
-  font-size: 11px !important;
-  font-weight: 600 !important;
-  margin-right: 6px !important;
-  text-transform: uppercase !important;
+  display: inline-block;
+  padding: 2px 6px;
+  background: var(--yomi-primary-soft);
+  color: var(--yomi-primary);
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  margin-right: 6px;
+  text-transform: uppercase;
 }
 
 /* Scrollbar tinh tế */
 .definition-container::-webkit-scrollbar,
 .yomi-feature-body::-webkit-scrollbar {
-  width: 4px !important;
+  width: 4px;
 }
+
 .definition-container::-webkit-scrollbar-thumb,
 .yomi-feature-body::-webkit-scrollbar-thumb {
-  background: var(--yomi-border) !important;
-  border-radius: 10px !important;
+  background: var(--yomi-border);
+  border-radius: 10px;
 }
 
 /* 1. Sửa lại Header để chứa được Tag dài */
 .yomi-header {
-  padding: 0 !important;
-  display: flex !important;
-  flex-direction: column !important; /* Đổi sang column để tiêu đề và ghi chú gốc không đè nhau */
-  gap: 0px !important;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  /* Đổi sang column để tiêu đề và ghi chú gốc không đè nhau */
+  gap: 0px;
 }
 
 /* 2. Tiêu đề chính */
 .popup-term-title {
-  font-size: 24px !important; /* Tăng độ đậm chất Migaku */
-  line-height: 1.2 !important;
-  color: var(--yomi-primary) !important;
-  word-break: break-word !important;
-}
-
-/* 3. Dòng thông tin "Gốc của..." - Nhỏ lại và tinh tế hơn */
-.yomi-origin-note {
-  font-size: 13px !important;
-  color: var(--yomi-text-sub) !important;
-  font-style: italic !important;
-  margin-bottom: 4px !important;
-  display: block !important;
+  font-size: 24px;
+  /* Tăng độ đậm chất Migaku */
+  line-height: 1.2;
+  color: var(--yomi-primary);
+  word-break: break-word;
 }
 
 /* 4. Sửa Tag - Quan trọng nhất */
 .yomi-tag {
-  display: inline-block !important;
-  padding: 2px 8px !important;
-  background: var(--yomi-primary-soft) !important;
-  color: var(--yomi-primary) !important;
-  border-radius: 4px !important;
-  font-size: 10px !important; /* Nhỏ lại cho chuyên nghiệp */
-  font-weight: 700 !important;
-  text-transform: uppercase !important;
+  display: inline-block;
+  padding: 2px 8px;
+  background: var(--yomi-primary-soft);
+  color: var(--yomi-primary);
+  border-radius: 4px;
+  font-size: 10px;
+  /* Nhỏ lại cho chuyên nghiệp */
+  font-weight: 700;
+  text-transform: uppercase;
 
   /* Chống tràn cho tag quá dài */
-  max-width: fit-content !important;
-  white-space: nowrap !important;
-  overflow: hidden !important;
-  text-overflow: ellipsis !important;
+  max-width: fit-content;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   border: 1px solid var(--yomi-primary);
 }
 
@@ -456,7 +451,7 @@
   inset: 4px;
   border-radius: 6px;
   pointer-events: none;
-  box-shadow: 0 0 0 2px var(--yomi-primary) !important;
+  box-shadow: 0 0 0 2px var(--yomi-primary);
 }
 
 .yomitan-popup-stack .yomi-thumb-wrap.is-selected::before {
@@ -465,7 +460,7 @@
   inset: 0;
   border-radius: 10px;
   pointer-events: none;
-  box-shadow: 0 0 0 2px rgb(66, 183, 42) inset !important;
+  box-shadow: 0 0 0 2px rgb(66, 183, 42) inset;
 }
 
 .yomi-image-controls {
@@ -546,6 +541,79 @@
   box-shadow: inset 0 0 0 1px #42b72a;
 }
 
+/* ===== Term Selector (between header and features) ===== */
+.yomi-term-selector {
+  position: sticky;
+  top: 0;
+  z-index: 9;
+  background: var(--yomi-surface);
+      padding: 6px 6px 0;
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  flex-shrink: 0;
+}
+
+.yomi-term-selector::-webkit-scrollbar {
+  height: 4px;
+}
+
+.yomi-term-selector::-webkit-scrollbar-thumb {
+  background: var(--yomi-border);
+  border-radius: 10px;
+}
+
+.yomi-term-tab {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 2px;
+  padding: 0 6px;
+  background: var(--yomi-bg);
+  border: 1px solid var(--yomi-border);
+  border-radius: 8px;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: all 0.15s ease;
+}
+
+.yomi-term-tab:hover {
+  background: var(--yomi-primary-soft);
+  border-color: var(--yomi-primary);
+}
+
+.yomi-term-tab-name {
+  font-size: 12px;
+  font-weight: 600;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 100%;
+  color: unset;
+}
+
+.yomi-term-tab-meta {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  color: var(--yomi-text-sub);
+}
+
+.yomi-term-tab.is-active .yomi-term-tab-meta {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.yomi-term-tab-index {
+  font-weight: 700;
+}
+
+.yomi-term-tab-indicator {
+  font-size: 10px;
+  display: none;
+}
+
 /* ===== Feature-shell layout ===== */
 .yomi-header-main {
   display: flex;
@@ -559,11 +627,11 @@
 }
 
 .yomi-feature-shell {
-  position: sticky !important;
-  top: 0 !important;
-  z-index: 9 !important;
+  position: sticky;
+  top: 0;
+  z-index: 9;
   background: var(--yomi-surface);
-  flex-shrink: 0 !important;
+  flex-shrink: 0;
 }
 
 .yomi-feature-toolbar {
@@ -572,9 +640,10 @@
   gap: 6px;
   padding: 6px 6px;
   overflow-x: auto;
-  background: var(--yomi-surface) !important;
+  background: var(--yomi-surface);
 }
 
+.yomi-term-tab,
 .yomi-feature-btn {
   border: 1px solid var(--yomi-border);
   background: var(--yomi-bg);
@@ -587,6 +656,7 @@
   white-space: nowrap;
 }
 
+.yomi-term-tab.is-active,
 .yomi-feature-btn.is-active {
   border-color: var(--yomi-primary);
   color: var(--yomi-primary);
@@ -606,9 +676,9 @@
 .yomi-feature-body {
   /* min-height: 133px;
   max-height: 162px; */
-  padding: 6px 6px 6px !important;
-  overflow-y: auto !important;
-  overflow-x: hidden !important;
+  padding: 0px 6px 6px;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .yomi-feature-body.is-empty {
@@ -648,7 +718,7 @@
   margin-bottom: 8px;
 }
 
-.yomi-forvo-head > span {
+.yomi-forvo-head>span {
   font-size: 11px;
   color: var(--yomi-text-sub);
   font-weight: 700;
@@ -661,7 +731,7 @@
 
 .yomi-forvo-actions .yomi-forvo-play,
 .yomi-forvo-actions .yomi-forvo-play-all,
-.yomi-forvo-more-row .yomi-forvo-more {
+.yomi-forvo-more-row {
   border: 1px solid var(--yomi-border);
   background: var(--yomi-surface);
   color: var(--yomi-text-main);
@@ -669,6 +739,18 @@
   padding: 4px 8px;
   font-size: 11px;
   cursor: pointer;
+}
+
+.flex {
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+  align-items: center;
+}
+
+.title-forvo {
+  color: var(--yomi-text-sub);
+  font-size: 11px;
 }
 
 .yomi-forvo-actions .yomi-forvo-play,
@@ -681,7 +763,13 @@
 .yomi-forvo-more-row {
   display: flex;
   justify-content: flex-end;
-  margin-top: 6px;
+  border: none;
+  padding: 2px;
+}
+
+.yomi-forvo-more {
+  border: none;
+  padding: 0px
 }
 
 .yomi-audio-item {
@@ -755,7 +843,7 @@
   margin-bottom: 8px;
 }
 
-.yomi-tts-head > span {
+.yomi-tts-head>span {
   font-size: 11px;
   color: var(--yomi-text-sub);
   font-weight: 700;
@@ -853,8 +941,8 @@
 }
 
 .yomi-other-list a:hover {
-  background: var(--yomi-primary-soft) !important;
-  border-color: var(--yomi-primary) !important;
+  background: var(--yomi-primary-soft);
+  border-color: var(--yomi-primary);
 }
 
 /* ===== Image section ===== */
@@ -886,6 +974,7 @@
   from {
     opacity: 0;
   }
+
   to {
     opacity: 1;
   }
@@ -908,6 +997,7 @@
     opacity: 0;
     transform: scale(0.95) translateY(-10px);
   }
+
   to {
     opacity: 1;
     transform: scale(1) translateY(0);
@@ -996,12 +1086,12 @@
 }
 
 .yomi-note-id[style*="cursor: pointer"] {
-  color: var(--yomi-primary) !important;
-  text-decoration: underline !important;
+  color: var(--yomi-primary);
+  text-decoration: underline;
 }
 
 .yomi-note-id[style*="cursor: pointer"]:hover {
-  opacity: 0.8 !important;
+  opacity: 0.8;
 }
 
 .yomi-note-deck {
@@ -1074,28 +1164,6 @@
   margin-bottom: 12px;
 }
 
-.ocean-type-badge {
-  display: inline-block;
-  padding: 4px 10px;
-  border-radius: 12px;
-  font-size: 11px;
-  font-weight: 600;
-  margin-bottom: 8px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.ocean-type-badge.phrasal {
-  background: linear-gradient(135deg, #0866ff 0%, #00c0a5 100%);
-  color: white;
-}
-
-.ocean-type-badge.single {
-  background: var(--yomi-surface);
-  color: var(--yomi-text-sub);
-  border: 1px solid var(--yomi-border);
-}
-
 .ocean-phrasal-indicator {
   background: var(--yomi-primary-soft);
   padding: 8px 12px;
@@ -1133,14 +1201,78 @@
   margin-right: 6px;
 }
 
+/* Phrasal Verb Term Display */
+.ocean-phrasal-term {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  background: linear-gradient(135deg, rgba(8, 102, 255, 0.08) 0%, rgba(0, 192, 165, 0.08) 100%);
+  border-radius: 8px;
+  border-left: 3px solid var(--yomi-primary);
+}
+
+.ocean-phrasal-label {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--yomi-text-sub);
+  background: var(--yomi-primary-soft);
+  padding: 3px 8px;
+  border-radius: 4px;
+  width: fit-content;
+}
+
+.ocean-phrasal-name {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--yomi-primary);
+  word-break: break-word;
+}
+
+/* Phrasal Verb Definition Display */
+.ocean-phrasal-definition {
+  margin: 10px 0;
+  padding: 10px 12px;
+  background: var(--yomi-surface);
+  border-radius: 8px;
+  border-left: 2px solid var(--yomi-accent);
+}
+
+.ocean-definition-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--yomi-text-sub);
+  margin-bottom: 8px;
+}
+
+.ocean-score-info {
+  font-size: 0.85em;
+  color: var(--yomi-text-sub);
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--yomi-border);
+}
+
 /* Dark mode adjustments */
 @media (prefers-color-scheme: dark) {
   .ocean-phrasal-block {
     background: linear-gradient(135deg, rgba(62, 166, 255, 0.08) 0%, rgba(0, 192, 165, 0.08) 100%);
   }
-  
-  .ocean-type-badge.single {
+
+  .ocean-phrasal-term {
+    background: linear-gradient(135deg, rgba(62, 166, 255, 0.08) 0%, rgba(0, 192, 165, 0.08) 100%);
+    border-left-color: var(--yomi-primary);
+  }
+
+  .ocean-phrasal-definition {
     background: var(--yomi-surface);
-    color: var(--yomi-text-sub);
+    border-left-color: var(--yomi-accent);
   }
 }

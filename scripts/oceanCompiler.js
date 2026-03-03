@@ -39,6 +39,11 @@ export function compilePhrasalPattern(term) {
   pattern = pattern.replace(/___OBJECT___/g, "(?:[\\w'\\-]+(?:\\s+[\\w'\\-]+){0,4})");
   pattern = pattern.replace(/___PERSON___/g, "(?:[\\w'\\-]+(?:\\s+[\\w'\\-]+){0,3})");
   pattern = pattern.replace(/___POSSESSIVE___/g, "(my|your|his|her|its|our|their|one's)");
+  
+  // Replace specific possessives (my, your, his, her, its, our, their) with possessive group
+  // This allows matching any possessive in the sentence
+  pattern = pattern.replace(/\b(my|your|his|her|its|our|their)\b/g, "(?:my|your|his|her|its|our|their)");
+  
   const startsWithWord = /^[a-z(]/.test(pattern);
   const endsWithWord = /[a-z)]$/.test(pattern);
   if (startsWithWord) pattern = '\\b' + pattern;

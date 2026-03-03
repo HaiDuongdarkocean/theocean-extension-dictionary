@@ -6,7 +6,7 @@ import { getConfig, saveConfig } from "./configManager.js";
 import { TTSModule } from "./ttsModule.js";
 import { lookupTermWithFreq } from "./storage.js";
 import { importDictionary, importFrequencyList } from "./importManager.js";
-
+import { lemmatizeWord, matchPhrasalVerb, getPatterns } from "./oceanEngine.js";
 
 console.log("Background Service Worker đang chạy...");
 
@@ -84,6 +84,7 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 5000) {
   }
 }
 
+// 🌊 OCEAN ENGINE: Helper function to match phrasal verbs in background
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   // Check Anki connection
   if (request.action === "checkAnkiConnection") {
@@ -448,6 +449,49 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     fetchImagesFromGoogle(request.term, maxLinks)
       .then((urls) => sendResponse({ success: true, urls }))
       .catch((err) => sendResponse({ success: false, error: err.message }));
+    return true;
+  }
+
+  // 🌊 OCEAN ENGINE: Lemmatize word
+  if (request.action === "lemmatizeWord") {
+    const { word } = request;
+    
+    if (!word) {
+      sendResponse({ success: false, error: "Missing word parameter" });
+      return true;
+    }
+
+    lemmatizeWord(word)
+      .then((lemmatized) => {
+        sendResponse({ success: true, lemmatized });
+      })
+      .catch((err) => {
+        console.error("Error in lemmatizeWord:", err);
+        sendResponse({ success: false, error: err.message });
+      });
+    
+    return true;
+  }
+
+  // 🌊 OCEAN ENGINE: Match phrasal verbs
+  if (request.action === "matchPhrasalVerb") {
+    const { targetWord, lemmaWord, contextSentence } = request;
+    
+    if (!targetWord || !lemmaWord || !contextSentence) {
+      sendResponse({ success: false, error: "Missing targetWord, lemmaWord or contextSentence" });
+      return true;
+    }
+
+    // Call the helper function to match phrasal verbs
+    matchPhrasalVerb(targetWord, lemmaWord, contextSentence)
+      .then((result) => {
+        sendResponse({ success: true, result });
+      })
+      .catch((err) => {
+        console.error("Error in matchPhrasalVerb:", err);
+        sendResponse({ success: false, error: err.message });
+      });
+    
     return true;
   }
 });

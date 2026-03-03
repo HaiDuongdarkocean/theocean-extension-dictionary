@@ -355,7 +355,7 @@ select,
 
 .actions {
   display: flex;
-  /* gap: 10px; */
+  gap: 10px;
   align-items: center;
   justify-content: flex-end;
   padding-top: 12px;
@@ -455,7 +455,7 @@ select,
 }
 
 .input--priority {
-  width: 84px !important;
+  width: 84px ;
   text-align: center;
   font-weight: 900;
   background: rgba(8, 102, 255, 0.08);

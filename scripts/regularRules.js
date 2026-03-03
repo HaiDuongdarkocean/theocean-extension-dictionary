@@ -40,17 +40,23 @@ const suffixRules = {
     }
 };
 
+// Import lookupTermWithFreq for word validation
+import { lookupTermWithFreq } from "./storage.js";
+
 // Hàm kiểm tra xem một từ có tồn tại trong từ điển không
-// (Hàm này giả định con đã có biến dictionary dạng Map hoặc Set)
-// Phải có chữ async ở đầu
 async function isValidWord(word) {
     if (!word) return false;
     
-    // Đợi kết quả từ IndexedDB gửi về
-    const result = await getDefinitionSendMessage(word.toLowerCase());
-    
-    // Nếu kết quả khác null nghĩa là từ đó có tồn tại trong DB
-    return result !== null;
+    try {
+        // Use lookupTermWithFreq to check if word exists in dictionary
+        const result = await lookupTermWithFreq(word.toLowerCase(), { mode: "first_match", maxDictionaries: 1 });
+        
+        // If result has entries, the word exists
+        return result && result.results && result.results.length > 0;
+    } catch (error) {
+        console.warn(`isValidWord error for "${word}":`, error);
+        return false;
+    }
 }
 
 // Hàm trả về từ gốc (Root) và thông tin ngữ pháp (Tag)
@@ -82,7 +88,7 @@ async function getRegularRoot(word) {
                 // Nếu 'wolf' có trong từ điển -> CHỐT LUÔN!
                 const exists = await isValidWord(candidate.root);
                 if (exists) {
-                    console.log(`Tỉa từ thành công: ${word} -> ${candidate.root}`);
+                    console.log(`✓ Regular lemmatization: ${word} -> ${candidate.root}`);
                     return candidate; // Trả về { root: 'wolf', tag: '...' }
                 }
             }
@@ -92,3 +98,6 @@ async function getRegularRoot(word) {
     // Nếu chạy hết vòng lặp mà không tìm ra, nghĩa là từ này không biến đổi (hoặc từ điển thiếu)
     return null;
 }
+
+// ES MODULE EXPORT (cho background.js)
+export { getRegularRoot };

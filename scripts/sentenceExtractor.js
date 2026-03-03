@@ -146,32 +146,90 @@ function calculateCaretOffset(range, container) {
  * @returns {string} - Target word
  */
 function extractTargetWord(range) {
-  if (!range) return '';
+  if (!range) {
+    console.log('🌊 DEBUG extractTargetWord: No range provided');
+    return '';
+  }
   
   try {
-    // Try to expand range to word boundary
+    console.log('🌊 DEBUG extractTargetWord: Range toString:', range.toString());
+    console.log('🌊 DEBUG extractTargetWord: Range offsets - start:', range.startOffset, 'end:', range.endOffset);
+    
+    // If range is collapsed (caret position), expand to word
+    if (range.collapsed || range.startOffset === range.endOffset) {
+      console.log('🌊 DEBUG extractTargetWord: Range is collapsed, expanding to word');
+      
+      const textNode = range.startContainer;
+      console.log('🌊 DEBUG extractTargetWord: Text node type:', textNode.nodeType, 'Node.TEXT_NODE:', Node.TEXT_NODE);
+      
+      // Handle text nodes
+      if (textNode.nodeType === Node.TEXT_NODE) {
+        const text = textNode.textContent || '';
+        const offset = range.startOffset;
+        console.log('🌊 DEBUG extractTargetWord: Text:', text, 'Offset:', offset);
+        
+        // Find word boundaries
+        const before = text.substring(0, offset).match(/\S+$/);
+        const after = text.substring(offset).match(/^\S+/);
+        
+        const word = (before ? before[0] : '') + (after ? after[0] : '');
+        console.log('🌊 DEBUG extractTargetWord: Extracted word from collapsed range:', word);
+        return word.trim();
+      } else {
+        // Handle element nodes
+        console.log('🌊 DEBUG extractTargetWord: Not a text node, trying children');
+        const text = textNode.textContent || '';
+        const offset = range.startOffset;
+        console.log('🌊 DEBUG extractTargetWord: Element text:', text, 'Offset:', offset);
+        
+        const before = text.substring(0, offset).match(/\S+$/);
+        const after = text.substring(offset).match(/^\S+/);
+        
+        const word = (before ? before[0] : '') + (after ? after[0] : '');
+        console.log('🌊 DEBUG extractTargetWord: Extracted word from element:', word);
+        return word.trim();
+      }
+    }
+    
+    // If range has selection, try to expand to word boundary
     const wordRange = range.cloneRange();
     
     if (wordRange.expand) {
-      wordRange.expand('word');
-      return wordRange.toString().trim();
+      try {
+        wordRange.expand('word');
+        const expandedWord = wordRange.toString().trim();
+        console.log('🌊 DEBUG extractTargetWord: Expanded word:', expandedWord);
+        return expandedWord;
+      } catch (expandError) {
+        console.log('🌊 DEBUG extractTargetWord: expand() failed:', expandError);
+      }
     }
     
-    // Fallback: manual word extraction
+    // Fallback: manual word extraction from selection
+    const selectedText = range.toString().trim();
+    if (selectedText) {
+      console.log('🌊 DEBUG extractTargetWord: Using selected text:', selectedText);
+      return selectedText;
+    }
+    
+    // Last resort: extract from start container
     const textNode = range.startContainer;
-    if (textNode.nodeType !== Node.TEXT_NODE) return '';
+    if (textNode.nodeType === Node.TEXT_NODE) {
+      const text = textNode.textContent || '';
+      const offset = range.startOffset;
+      
+      const before = text.substring(0, offset).match(/\S+$/);
+      const after = text.substring(offset).match(/^\S+/);
+      
+      const word = (before ? before[0] : '') + (after ? after[0] : '');
+      console.log('🌊 DEBUG extractTargetWord: Last resort word:', word);
+      return word.trim();
+    }
     
-    const text = textNode.textContent || '';
-    const offset = range.startOffset;
-    
-    // Find word boundaries
-    const before = text.substring(0, offset).match(/\S+$/);
-    const after = text.substring(offset).match(/^\S+/);
-    
-    const word = (before ? before[0] : '') + (after ? after[0] : '');
-    return word.trim();
+    console.log('🌊 DEBUG extractTargetWord: Could not extract word');
+    return '';
   } catch (e) {
-    console.error('Error extracting target word:', e);
+    console.error('🌊 DEBUG extractTargetWord: Error:', e);
     return '';
   }
 }
@@ -273,16 +331,23 @@ function getOceanContext(range) {
     
     // Step 5: Calculate caret offset
     const caretOffset = calculateCaretOffset(range, container);
+    console.log('🌊 DEBUG: Caret offset calculated:', caretOffset);
     
     // Step 6: Extract target word
     const targetWord = extractTargetWord(range);
-    
-    console.log('Debug - Target word:', targetWord, 'Caret offset:', caretOffset);
+    console.log('🌊 DEBUG: Target word extracted:', targetWord);
+    console.log('🌊 DEBUG: Range info:', {
+      startContainer: range.startContainer,
+      startOffset: range.startOffset,
+      endContainer: range.endContainer,
+      endOffset: range.endOffset,
+      toString: range.toString()
+    });
     
     // Step 7: Find sentence (PRIORITY: target word first, then offset)
     const sentence = findSentenceAtOffset(segments, caretOffset, targetWord);
     
-    console.log('Extracted sentence:', sentence);
+    console.log('🌊 DEBUG: Extracted sentence:', sentence);
     
     // Return context object
     return {

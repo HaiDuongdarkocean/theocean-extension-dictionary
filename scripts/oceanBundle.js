@@ -74,7 +74,11 @@ console.log("🌊 OCEAN Bundle: File loaded, starting execution...");
     pattern = pattern.replace(/___PERSON___/g, '(?:[\\w\'\\-]+(?:\\s+[\\w\'\\-]+){0,3})');
     pattern = pattern.replace(/___POSSESSIVE___/g, '(my|your|his|her|its|our|their|one\'s)');
     
-    // Rule 7: Add word boundaries
+    // Rule 7: Replace specific possessives (my, your, his, her, its, our, their) with possessive group
+    // This allows matching any possessive in the sentence
+    pattern = pattern.replace(/\b(my|your|his|her|its|our|their)\b/g, '(?:my|your|his|her|its|our|their)');
+    
+    // Rule 8: Add word boundaries
     const startsWithWord = /^[a-z(]/.test(pattern);
     const endsWithWord = /[a-z)]$/.test(pattern);
     
@@ -149,7 +153,39 @@ console.log("🌊 OCEAN Bundle: File loaded, starting execution...");
     return dbPromise;
   }
 
+  // Ensure phrasal_patterns store exists in IndexedDB
+  async function ensurePhrasalStore() {
+    console.log("🔍 DEBUG: ensurePhrasalStore() called");
+    return new Promise((resolve, reject) => {
+      const request = indexedDB.open(DB_NAME, DB_VERSION);
+      
+      request.onupgradeneeded = (event) => {
+        const db = event.target.result;
+        
+        if (!db.objectStoreNames.contains(PHRASAL_STORE)) {
+          const store = db.createObjectStore(PHRASAL_STORE, { 
+            keyPath: "id", 
+            autoIncrement: true 
+          });
+          
+          store.createIndex("anchorWord", "anchorWord", { unique: false });
+          store.createIndex("anchorPriority", ["anchorWord", "priority"], { unique: false });
+          store.createIndex("resourceId", "resourceId", { unique: false });
+          
+          console.log("✓ ensurePhrasalStore: Created phrasal_patterns store with indexes");
+        }
+      };
+      
+      request.onsuccess = () => {
+        resolve();
+      };
+      
+      request.onerror = () => reject(request.error);
+    });
+  }
+
   async function getPhrasalPatternsByAnchor(anchorWord) {
+    await ensurePhrasalStore();
     const db = await initDB();
     
     return new Promise((resolve, reject) => {
@@ -176,6 +212,7 @@ console.log("🌊 OCEAN Bundle: File loaded, starting execution...");
   }
 
   async function countPhrasalPatterns() {
+    await ensurePhrasalStore();
     const db = await initDB();
     
     return new Promise((resolve, reject) => {
@@ -189,6 +226,7 @@ console.log("🌊 OCEAN Bundle: File loaded, starting execution...");
   }
 
   async function getAllAnchorWords() {
+    await ensurePhrasalStore();
     const db = await initDB();
     
     return new Promise((resolve, reject) => {
@@ -238,9 +276,9 @@ console.log("🌊 OCEAN Bundle: File loaded, starting execution...");
     }
     
     // Try regular lemmatization (global function from regularRules.js)
-    if (typeof getRegularRoot === 'function') {
+    if (typeof window.getRegularRoot === 'function') {
       try {
-        const regularInfo = await getRegularRoot(cleaned);
+        const regularInfo = await window.getRegularRoot(cleaned);
         if (regularInfo && regularInfo.root) {
           console.log(`🌊 OCEAN: Regular lemmatization: "${cleaned}" → "${regularInfo.root}"`);
           return regularInfo.root;
@@ -321,65 +359,106 @@ console.log("🌊 OCEAN Bundle: File loaded, starting execution...");
     return text.substring(start, end);
   }
 
+  async function normalizeSentenceForMatching(sentence, targetWord) {
+    const sentenceLower = sentence.toLowerCase();
+    const targetWordLower = targetWord.toLowerCase();
+
+    const lemma = await lemmatizeWord(targetWord);
+    
+    let LemmatizeSentence = sentenceLower.replace(
+      new RegExp(`\\b${targetWordLower}\\b`, 'g'),
+      lemma
+    );
+    
+    // console.log(`normalizeSentenceForMatching: Original sentence: "${sentenceLower}"`);
+    // console.log(`normalizeSentenceForMatching: Normalized sentence: "${normalized}"`);
+    
+    return LemmatizeSentence;
+  }
+
+  function calculateMatchScore(displayTerm, matchedText) {
+    if (!displayTerm || !matchedText) return 0;
+    
+    const placeholders = /\b(sth|sb|poss|something|someone|your|yourself|right|really)\b/gi;
+    const cleanTerm = displayTerm.replace(/[()]/g, '').trim();
+    const words = cleanTerm.split(/\s+/).filter(w => w.length > 0);
+    
+    let fixedWords = 0;
+    for (const word of words) {
+      if (!placeholders.test(word)) {
+        fixedWords++;
+      }
+    }
+    
+    placeholders.lastIndex = 0;
+    
+    const matchLength = matchedText.length;
+    const score = (fixedWords * 10) + matchLength;
+    
+    console.log(`  📊 Score calculation: displayTerm="${displayTerm}", fixedWords=${fixedWords}, matchLength=${matchLength}, score=${score}`);
+    
+    return score;
+  }
+
   async function findPhrasalMatch(targetWord, contextSentence) {
+    console.log("🩵 findPhrasalMatch: started")
     if (!targetWord || !contextSentence) {
       console.log("🌊 OCEAN: Missing targetWord or contextSentence");
       return null;
     }
     
     try {
-      const anchorWord = await lemmatizeWord(targetWord);
-      console.log(`🌊 OCEAN: Lemmatized "${targetWord}" → "${anchorWord}"`);
-      
-      const candidates = await getPhrasalPatternsByAnchor(anchorWord);
-      
-      if (!candidates || candidates.length === 0) {
-        console.log(`🌊 OCEAN: No phrasal patterns found for anchor "${anchorWord}"`);
-        return null;
-      }
+    console.log("❤️bắt đầu try findPhrasalMatch❤️");
+    // Step 1: Lemmatize target word to get anchor
+    const anchorWord = await lemmatizeWord(targetWord);
+    console.log(`Step 1: chuẩn hóa từ vựng "${targetWord}" → "${anchorWord}"`);
+    
+    // Step 2: Lemmatize sentence for matching
+    const LemmatizeSentence = await normalizeSentenceForMatching(contextSentence, targetWord);
+    console.log(`Step 2: Chuẩn hóa sentence từ "${contextSentence}" -> "${LemmatizeSentence}"`)
+
+    // Step 3: Get candidate patterns from IndexedDB
+    const candidates = await getPhrasalPatternsByAnchor(anchorWord);
+    console.log(`Step 3: những thành viên sáng giá ${candidates.length}`)
+
+    if(candidates) {
+      candidates.forEach(e => {
+        console.log("thành viên: ", e);
+      });
+    }
+    
+    if (!candidates || candidates.length === 0) {
+      console.log(`💚 OCEAN: No phrasal patterns found for anchor "${anchorWord}"`);
+      console.log(`💚 OCEAN: This means either:`);
+      console.log(`  1. Dictionary not imported yet`);
+      console.log(`  2. No phrasal verbs with anchor "${anchorWord}" in dictionary`);
+      console.log(`  3. Migration didn't run during import`);
+      return null;
+    }
       
       console.log(`🌊 OCEAN: Testing ${candidates.length} patterns for "${anchorWord}"`);
       
-      // Replace target word with its lemmatized form in the sentence
-      const sentenceLower = contextSentence.toLowerCase();
-      const targetWordLower = targetWord.toLowerCase();
-      
-      // Find and replace the target word with its lemma
-      const lemmatizedSentence = sentenceLower.replace(
-        new RegExp(`\\b${targetWordLower}\\b`, 'gi'),
-        anchorWord
-      );
-      
-      console.log(`🌊 OCEAN: Original sentence: "${sentenceLower}"`);
-      console.log(`🌊 OCEAN: Lemmatized sentence: "${lemmatizedSentence}"`);
+      // Step 4: Test patterns and collect all matches with scores
+      const matches = [];
       
       for (const candidate of candidates) {
         try {
-          console.log(`🌊 OCEAN: Testing pattern "${candidate.originalTerm}"`);
-          console.log(`  📝 Compiled regex: ${candidate.compiledRegex}`);
+          console.log(`🌊 OCEAN: Testing pattern "${candidate.originalTerm}" (regex: ${candidate.compiledRegex.substring(0, 50)}...)`);
           const regex = new RegExp(candidate.compiledRegex, 'i');
-          const match = lemmatizedSentence.match(regex);
+          const match = LemmatizeSentence.match(regex);
           
           if (match) {
-            console.log(`✓ OCEAN: Matched pattern "${candidate.originalTerm}"`);
-            console.log(`  Detected: "${match[0]}"`);
+            const matchedText = match[0];
+            const score = calculateMatchScore(candidate.displayTerm, matchedText);
             
-            return {
-              status: "success",
-              matchType: "phrasal_verb",
-              data: {
-                term: candidate.originalTerm,
-                displayTerm: candidate.displayTerm,
-                detectedInSentence: match[0],
-                definition: candidate.definition,
-                pronunciation: candidate.pronunciation,
-                pos: candidate.pos,
-                meaningAtoms: candidate.meaningAtoms,
-                fullContext: contextSentence,
-                anchorWord: anchorWord,
-                priority: candidate.priority
-              }
-            };
+            matches.push({
+              score: score,
+              priority: candidate.priority,
+              candidate: candidate,
+              matchedText: matchedText
+            });
+            
+            console.log(`✓ OCEAN: Matched pattern "${candidate.originalTerm}" with score ${score}`);
           } else {
             console.log(`  ✗ No match for "${candidate.originalTerm}"`);
           }
@@ -389,8 +468,43 @@ console.log("🌊 OCEAN Bundle: File loaded, starting execution...");
         }
       }
       
-      console.log(`🌊 OCEAN: No pattern matched in context`);
-      return null;
+      // Step 5: Sort by score (descending), then by priority (descending)
+      if (matches.length === 0) {
+        console.log(`🌊 OCEAN: No pattern matched in context`);
+        return null;
+      }
+      
+      matches.sort((a, b) => {
+        if (b.score !== a.score) {
+          return b.score - a.score; // Higher score first
+        }
+        return b.priority - a.priority; // If score equal, higher priority first
+      });
+      
+      // Step 6: Return top result
+      const bestMatch = matches[0];
+      const candidate = bestMatch.candidate;
+      
+      console.log(`🌊 OCEAN: Best match selected: "${candidate.originalTerm}" (score: ${bestMatch.score})`);
+      console.log(`  All matches: ${matches.map(m => `"${m.candidate.originalTerm}"(${m.score})`).join(', ')}`);
+      
+      return {
+        status: "success",
+        matchType: "phrasal_verb",
+        data: {
+          term: candidate.originalTerm,
+          displayTerm: candidate.displayTerm,
+          detectedInSentence: bestMatch.matchedText,
+          definition: candidate.definition,
+          pronunciation: candidate.pronunciation,
+          pos: candidate.pos,
+          meaningAtoms: candidate.meaningAtoms,
+          fullContext: contextSentence,
+          anchorWord: anchorWord,
+          priority: candidate.priority,
+          score: bestMatch.score
+        }
+      };
       
     } catch (error) {
       console.error("⚠️ OCEAN: Error in findPhrasalMatch:", error);
@@ -420,6 +534,11 @@ console.log("🌊 OCEAN Bundle: File loaded, starting execution...");
     
     const contextInfo = `<div class="ocean-context-info">💡 Detected in context: "<i>${data.detectedInSentence}</i>"</div>`;
     definitionHtml += contextInfo;
+    
+    if (data.score !== undefined) {
+      const scoreInfo = `<div class="ocean-score-info" style="font-size: 0.85em; color: #666; margin-top: 8px;">🎯 Match Score: ${data.score}</div>`;
+      definitionHtml += scoreInfo;
+    }
     
     return {
       term: data.displayTerm || data.term,

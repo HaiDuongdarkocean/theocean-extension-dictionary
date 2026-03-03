@@ -65,6 +65,47 @@ async function testOceanEngine() {
     }
   }
   
+  // Test 3b: Test scoring algorithm (NEW)
+  console.log("\n🎯 Test 3b: Scoring Algorithm (Phrasal Verb Priority)");
+  const scoringTests = [
+    { 
+      text: "I spent all morning looking for the book, and it was right under my nose the whole time.",
+      index: 40,
+      word: "was",
+      expectedTerm: "be (right) under your nose",
+      description: "Should match 'be (right) under your nose' instead of 'be (really) something'"
+    },
+    {
+      text: "That would be something special",
+      index: 18,
+      word: "be",
+      expectedTerm: "be (really) something",
+      description: "Should match 'be (really) something' when context is about being special"
+    }
+  ];
+  
+  for (const test of scoringTests) {
+    console.log(`\n📋 ${test.description}`);
+    console.log(`  Sentence: "${test.text}"`);
+    console.log(`  Target word: "${test.word}"`);
+    console.log(`  Expected: "${test.expectedTerm}"`);
+    
+    try {
+      const match = await findPhrasalMatch(test.word, test.text);
+      if (match) {
+        const isCorrect = match.data.term === test.expectedTerm;
+        const icon = isCorrect ? "✅" : "❌";
+        console.log(`  ${icon} Got: "${match.data.term}"`);
+        console.log(`     Score: ${match.data.score}`);
+        console.log(`     Detected: "${match.data.detectedInSentence}"`);
+      } else {
+        console.log(`  ❌ No match found`);
+      }
+    } catch (error) {
+      console.error(`  ❌ Error:`, error);
+    }
+  }
+  
   // Test 4: Check database
   console.log("\n💾 Test 4: Database Check");
   const { countPhrasalPatterns, getAllAnchorWords } = window.oceanStorage;
