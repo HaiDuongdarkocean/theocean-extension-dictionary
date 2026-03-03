@@ -37,10 +37,14 @@ export async function lemmatizeWord(word) {
         // Step 2: Try regular lemmatization
         if (typeof getRegularRoot === 'function') {
             try {
+                console.log(`  Trying regular lemmatization for: "${cleaned}"`);
                 const regularInfo = await getRegularRoot(cleaned);
+                console.log(`  Regular result:`, regularInfo);
                 if (regularInfo && regularInfo.root) {
-                    console.log(`  Regular: "${cleaned}" → "${regularInfo.root}"`);
+                    console.log(`  ✓ Regular: "${cleaned}" → "${regularInfo.root}"`);
                     return regularInfo.root;
+                } else {
+                    console.log(`  Regular lemmatization returned null for: "${cleaned}"`);
                 }
             } catch (error) {
                 console.warn(`  getRegularRoot error for "${cleaned}":`, error);
