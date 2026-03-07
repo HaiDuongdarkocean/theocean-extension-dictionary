@@ -118,6 +118,15 @@ export function calculateMatchScore(displayTerm, matchedText) {
 /**
  * Match phrasal verb in background
  * Main logic for phrasal verb matching
+ * 
+ * @param {string} targetWord - The word to match (may be inflected form)
+ * @param {string} lemmaWord - The lemmatized form of the word
+ * @param {string} contextSentence - The full sentence context
+ * @returns {Array<Object>|null} Array of top 5 matches sorted by score (descending),
+ *                               or null if no matches found. Each match has:
+ *                               - status: "success"
+ *                               - matchType: "phrasal_verb"
+ *                               - data: { term, displayTerm, definition, score, ... }
  */
 export async function matchPhrasalVerb(targetWord, lemmaWord, contextSentence) {
     try {
@@ -178,29 +187,33 @@ export async function matchPhrasalVerb(targetWord, lemmaWord, contextSentence) {
             return b.priority - a.priority;
         });
 
-        // Step 5: Return top result
-        const bestMatch = matches[0];
-        const candidate = bestMatch.candidate;
+        // Step 5: Return top 5 matches (or all if < 5)
+        const topMatches = matches.slice(0, 5);
+        
+        console.log(`🌊 OCEAN: Returning top ${topMatches.length} matches`);
 
-        console.log(`🌊 OCEAN: Best match selected: "${candidate.originalTerm}" (score: ${bestMatch.score})`);
-
-        return {
-            status: "success",
-            matchType: "phrasal_verb",
-            data: {
-                term: candidate.originalTerm,
-                displayTerm: candidate.displayTerm,
-                detectedInSentence: bestMatch.matchedText,
-                definition: candidate.definition,
-                pronunciation: candidate.pronunciation,
-                pos: candidate.pos,
-                meaningAtoms: candidate.meaningAtoms,
-                fullContext: contextSentence,
-                anchorWord: lemmaWord,
-                priority: candidate.priority,
-                score: bestMatch.score
-            }
-        };
+        return topMatches.map((match) => {
+            const candidate = match.candidate;
+            console.log(`  - "${candidate.originalTerm}" (score: ${match.score})`);
+            
+            return {
+                status: "success",
+                matchType: "phrasal_verb",
+                data: {
+                    term: candidate.originalTerm,
+                    displayTerm: candidate.displayTerm,
+                    detectedInSentence: match.matchedText,
+                    definition: candidate.definition,
+                    pronunciation: candidate.pronunciation,
+                    pos: candidate.pos,
+                    meaningAtoms: candidate.meaningAtoms,
+                    fullContext: contextSentence,
+                    anchorWord: lemmaWord,
+                    priority: candidate.priority,
+                    score: match.score
+                }
+            };
+        });
 
     } catch (error) {
         console.error("⚠️ OCEAN: Error in matchPhrasalVerb:", error);

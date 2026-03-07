@@ -718,6 +718,27 @@ async function getDefinitionSendMessage(word) {
 // 🌊 OCEAN ENGINE: Match phrasal verbs using OCEAN regex patterns
 // Receives complete sentence from Ocean Context
 // Returns: { phrasal, singleWord, hasBoth } or null
+/**
+ * Match phrasal verb with OCEAN engine and build term options
+ * 
+ * Calls updated matchPhrasalVerb to get top 5 matches, then builds termOptions array
+ * from phrasal matches + single word options (targetWord + lemmaWord if different).
+ * 
+ * @param {string} targetWord - The word to match (may be inflected form)
+ * @param {string} completeSentence - The full sentence context
+ * @returns {Object|null} Structure: {
+ *   term: string (primary term),
+ *   definition: string,
+ *   termOptions: Array<{
+ *     type: "phrasal" | "single",
+ *     term: string,
+ *     index: number,
+ *     data: Object
+ *   }>,
+ *   hasMultipleTerms: boolean,
+ *   ... other fields
+ * } or null if no match found
+ */
 async function matchPhrasalVerbWithOcean(targetWord, completeSentence) {
 
   if (!targetWord || !completeSentence) {
@@ -746,6 +767,7 @@ async function matchPhrasalVerbWithOcean(targetWord, completeSentence) {
     }
 
     // Step 2: Send message to background service worker with lemmatized word
+    // Now matchPhrasalVerb returns array of top 5 matches instead of single match
     const response = await runtimeMessageWithTimeout({
       action: "matchPhrasalVerb",
       targetWord: targetWord,
@@ -753,245 +775,89 @@ async function matchPhrasalVerbWithOcean(targetWord, completeSentence) {
       contextSentence: completeSentence
     }, 5000);
 
-    if (!response || !response.success) {
-      console.log("🌊 matchPhrasalVerbWithOcean: No phrasal match found, returning single word only");
-      
-      // No phrasal verb, but still return single word data
-      const singleWordResult = await getDefinitionSendMessage(lemmatizedWord);
-      
-      if (!singleWordResult) {
-        console.log("🌊 matchPhrasalVerbWithOcean: No single word found either");
-        return null;
-      }
-      
-      console.log(`📚 Returning single word data for: "${lemmatizedWord}"`);
-      
-      // Format frequency once
-      let formattedFrequency = null;
-      if (singleWordResult.freqs && Array.isArray(singleWordResult.freqs) && singleWordResult.freqs.length > 0) {
-        formattedFrequency = singleWordResult.freqs
-          .map(f => `${f.resource?.title || f.resource?.id || 'Unknown'}: ${f.entries?.[0]?.value || 'N/A'}`)
-          .join(" | ");
-      }
-      
-      // Build term options with inflected and lemma forms
-      const termOptions = [];
-      
-      // Add inflected form if different from lemma
-      if (originalTargetWord !== lemmatizedWord) {
-        termOptions.push({
-          type: 'single',
-          term: originalTargetWord,
-          index: 1,
-          data: {
-            ...singleWordResult,
-            term: originalTargetWord,
-            originalWord: lemmatizedWord,
-            sentence: completeSentence,
-            frequency: formattedFrequency,
-            freqs: singleWordResult.freqs || [],
-            _showSentence: true,
-            _showTranslation: true,
-            _imagesEnabled: true
-          }
-        });
-      }
-      
-      // Add lemma form
-      termOptions.push({
-        type: 'single',
-        term: lemmatizedWord,
-        index: termOptions.length + 1,
-        data: {
-          ...singleWordResult,
-          term: lemmatizedWord,
-          sentence: completeSentence,
-          frequency: formattedFrequency,
-          freqs: singleWordResult.freqs || [],
-          _showSentence: true,
-          _showTranslation: true,
-          _imagesEnabled: true
-        }
-      });
-      
-      // Return single word result with term options
-      return {
-        term: originalTargetWord !== lemmatizedWord ? originalTargetWord : lemmatizedWord,
-        pronunciation: singleWordResult.pronunciation || "",
-        definition: singleWordResult.definition || "",
-        sentence: completeSentence,
-        frequency: formattedFrequency,
-        freqs: singleWordResult.freqs || [],
-        originalWord: originalTargetWord !== lemmatizedWord ? lemmatizedWord : null,
-        _showSentence: true,
-        _showTranslation: true,
-        _imagesEnabled: true,
-        termOptions: termOptions,
-        hasMultipleTerms: termOptions.length > 1
-      };
-    }
-
-    const phrasalMatch = response.result;
-    if (!phrasalMatch) {
-      console.log("🌊 matchPhrasalVerbWithOcean: No phrasal match found, returning single word only");
-      
-      // No phrasal verb, but still return single word data
-      const singleWordResult = await getDefinitionSendMessage(lemmatizedWord);
-      
-      if (!singleWordResult) {
-        console.log("🌊 matchPhrasalVerbWithOcean: No single word found either");
-        return null;
-      }
-      
-      console.log(`📚 Returning single word data for: "${lemmatizedWord}"`);
-      
-      // Format frequency once
-      let formattedFrequency = null;
-      if (singleWordResult.freqs && Array.isArray(singleWordResult.freqs) && singleWordResult.freqs.length > 0) {
-        formattedFrequency = singleWordResult.freqs
-          .map(f => `${f.resource?.title || f.resource?.id || 'Unknown'}: ${f.entries?.[0]?.value || 'N/A'}`)
-          .join(" | ");
-      }
-      
-      // Build term options with inflected and lemma forms
-      const termOptions = [];
-      
-      // Add inflected form if different from lemma
-      if (originalTargetWord !== lemmatizedWord) {
-        termOptions.push({
-          type: 'single',
-          term: originalTargetWord,
-          index: 1,
-          data: {
-            ...singleWordResult,
-            term: originalTargetWord,
-            originalWord: lemmatizedWord,
-            sentence: completeSentence,
-            frequency: formattedFrequency,
-            freqs: singleWordResult.freqs || [],
-            _showSentence: true,
-            _showTranslation: true,
-            _imagesEnabled: true
-          }
-        });
-      }
-      
-      // Add lemma form
-      termOptions.push({
-        type: 'single',
-        term: lemmatizedWord,
-        index: termOptions.length + 1,
-        data: {
-          ...singleWordResult,
-          term: lemmatizedWord,
-          sentence: completeSentence,
-          frequency: formattedFrequency,
-          freqs: singleWordResult.freqs || [],
-          _showSentence: true,
-          _showTranslation: true,
-          _imagesEnabled: true
-        }
-      });
-      
-      // Return single word result with term options
-      return {
-        term: originalTargetWord !== lemmatizedWord ? originalTargetWord : lemmatizedWord,
-        pronunciation: singleWordResult.pronunciation || "",
-        definition: singleWordResult.definition || "",
-        sentence: completeSentence,
-        frequency: formattedFrequency,
-        freqs: singleWordResult.freqs || [],
-        originalWord: originalTargetWord !== lemmatizedWord ? lemmatizedWord : null,
-        _showSentence: true,
-        _showTranslation: true,
-        _imagesEnabled: true,
-        termOptions: termOptions,
-        hasMultipleTerms: termOptions.length > 1
-      };
-    }
-
-    console.log(`🌊 matchPhrasalVerbWithOcean: ✓ Match found: "${phrasalMatch.data.term}"`);
-
-    // Format the result using the same logic as oceanMatcher
-    const data = phrasalMatch.data;
-    let definitionHtml = "";
-
-    if (data.meaningAtoms && data.meaningAtoms.length > 0) {
-      definitionHtml = data.meaningAtoms
-        .map((atom, idx) =>
-          `<div class="ocean-atom"><b>${atom.head || `#${idx + 1}`}</b> ${atom.glossHtml || ""}</div>`
-        )
-        .join("");
-    } else if (data.definition) {
-      definitionHtml = `<div class="ocean-atom">${data.definition}</div>`;
-    }
-
-    // Build comprehensive phrasal verb display with proper structure for parseDefinitionBlocks
-    const phrasalTerm = `<div class="ocean-phrasal-term">
-      <span class="ocean-phrasal-label">📘 Phrasal Verb/Idiom</span>
-      <span class="ocean-phrasal-name">${escapeHtml(data.term)}</span>
-    </div>`;
-    
-    // Wrap definition in ocean-atom for proper parsing
-    const phrasalDefinition = `<div class="ocean-phrasal-definition">
-      <div class="ocean-definition-label">Definition:</div>
-      <div class="ocean-atom">${definitionHtml}</div>
-    </div>`;
-
-    const contextInfo = `<div class="ocean-context-info">💡 Detected in context: "<i>${escapeHtml(data.detectedInSentence)}</i>"</div>`;
-    
-    let scoreInfo = "";
-    if (data.score !== undefined) {
-      scoreInfo = `<div class="ocean-score-info">🎯 Match Score: ${data.score}</div>`;
-    }
-
-    const fullPhrasalHtml = phrasalTerm + phrasalDefinition + contextInfo + scoreInfo;
-
-    // Also get single word definition for comparison (use lemmatized word)
+    // Get single word definition for fallback/comparison
     const singleWordResult = await getDefinitionSendMessage(lemmatizedWord);
     
-    console.log(`📊 singleWordResult for "${lemmatizedWord}":`, singleWordResult);
-    console.log(`📊 freqs data:`, singleWordResult?.freqs);
+    // Format frequency once for reuse
+    let formattedFrequency = null;
+    if (singleWordResult && singleWordResult.freqs && Array.isArray(singleWordResult.freqs) && singleWordResult.freqs.length > 0) {
+      formattedFrequency = singleWordResult.freqs
+        .map(f => `${f.resource?.title || f.resource?.id || 'Unknown'}: ${f.entries?.[0]?.value || 'N/A'}`)
+        .join(" | ");
+    }
 
-    // Build term options array for term selector
+    // Build term options array
     const termOptions = [];
-    
-    // Add phrasal verb as first option
-    termOptions.push({
-      type: 'phrasal',
-      term: data.displayTerm || data.term,
-      index: 1,
-      data: {
-        term: data.displayTerm || data.term,
-        pronunciation: data.pronunciation || "",
-        definition: fullPhrasalHtml,
-        isPhrasal: true,
-        originalTerm: data.term,
-        detectedPhrase: data.detectedInSentence,
-        meaningAtoms: data.meaningAtoms,
-        pos: data.pos,
-        sentence: completeSentence,
-        frequency: null,  // Phrasal verbs don't have frequency
-        _showSentence: true,
-        _showTranslation: true,
-        _imagesEnabled: true
-      }
-    });
-    
-    // Add single word options if available
-    if (singleWordResult) {
-      console.log(`📚 Building term options: original="${originalTargetWord}", lemma="${lemmatizedWord}"`);
+
+    // Step 3: Add phrasal verb matches (up to 5)
+    if (response && response.success && response.result && Array.isArray(response.result)) {
+      console.log(`🌊 matchPhrasalVerbWithOcean: Processing ${response.result.length} phrasal matches`);
       
-      // Format frequency once for reuse
-      let formattedFrequency = null;
-      if (singleWordResult.freqs && Array.isArray(singleWordResult.freqs) && singleWordResult.freqs.length > 0) {
-        formattedFrequency = singleWordResult.freqs
-          .map(f => `${f.resource?.title || f.resource?.id || 'Unknown'}: ${f.entries?.[0]?.value || 'N/A'}`)
-          .join(" | ");
-        console.log(`📊 Formatted frequency: "${formattedFrequency}"`);
-      } else {
-        console.log(`📊 No frequency data available for "${lemmatizedWord}"`);
+      for (const phrasalMatch of response.result) {
+        const data = phrasalMatch.data;
+        
+        // Format definition HTML
+        let definitionHtml = "";
+        if (data.meaningAtoms && data.meaningAtoms.length > 0) {
+          definitionHtml = data.meaningAtoms
+            .map((atom, idx) =>
+              `<div class="ocean-atom"><b>${atom.head || `#${idx + 1}`}</b> ${atom.glossHtml || ""}</div>`
+            )
+            .join("");
+        } else if (data.definition) {
+          definitionHtml = `<div class="ocean-atom">${data.definition}</div>`;
+        }
+
+        // Build comprehensive phrasal verb display
+        const phrasalTerm = `<div class="ocean-phrasal-term">
+          <span class="ocean-phrasal-label">📘 Phrasal Verb/Idiom</span>
+          <span class="ocean-phrasal-name">${escapeHtml(data.term)}</span>
+        </div>`;
+        
+        const phrasalDefinition = `<div class="ocean-phrasal-definition">
+          <div class="ocean-definition-label">Definition:</div>
+          <div class="ocean-atom">${definitionHtml}</div>
+        </div>`;
+
+        const contextInfo = `<div class="ocean-context-info">💡 Detected in context: "<i>${escapeHtml(data.detectedInSentence)}</i>"</div>`;
+        
+        let scoreInfo = "";
+        if (data.score !== undefined) {
+          scoreInfo = `<div class="ocean-score-info">🎯 Match Score: ${data.score}</div>`;
+        }
+
+        const fullPhrasalHtml = phrasalTerm + phrasalDefinition + contextInfo + scoreInfo;
+
+        // Add phrasal verb option
+        termOptions.push({
+          type: 'phrasal',
+          term: data.displayTerm || data.term,
+          index: termOptions.length + 1,
+          score: data.score || 0,
+          data: {
+            term: data.displayTerm || data.term,
+            pronunciation: data.pronunciation || "",
+            definition: fullPhrasalHtml,
+            isPhrasal: true,
+            originalTerm: data.term,
+            detectedPhrase: data.detectedInSentence,
+            meaningAtoms: data.meaningAtoms,
+            pos: data.pos,
+            sentence: completeSentence,
+            frequency: null,  // Phrasal verbs don't have frequency
+            _showSentence: true,
+            _showTranslation: true,
+            _imagesEnabled: true
+          }
+        });
       }
+    } else {
+      console.log("🌊 matchPhrasalVerbWithOcean: No phrasal matches found");
+    }
+
+    // Step 4: Add single word options (targetWord + lemmaWord if different)
+    if (singleWordResult) {
+      console.log(`📚 Building single word options: original="${originalTargetWord}", lemma="${lemmatizedWord}"`);
       
       // Add inflected form if different from lemma (e.g., "cheered" vs "cheer")
       if (originalTargetWord !== lemmatizedWord) {
@@ -1000,6 +866,7 @@ async function matchPhrasalVerbWithOcean(targetWord, completeSentence) {
           type: 'single',
           term: originalTargetWord,
           index: termOptions.length + 1,
+          score: 0,
           data: {
             ...singleWordResult,
             term: originalTargetWord,
@@ -1020,6 +887,7 @@ async function matchPhrasalVerbWithOcean(targetWord, completeSentence) {
         type: 'single',
         term: lemmatizedWord,
         index: termOptions.length + 1,
+        score: 0,
         data: {
           ...singleWordResult,
           term: lemmatizedWord,
@@ -1033,20 +901,52 @@ async function matchPhrasalVerbWithOcean(targetWord, completeSentence) {
       });
     }
 
-    // Return combined result with proper structure for showPopup
+    // Step 5: Validate we have at least one term option
+    if (termOptions.length === 0) {
+      console.log("🌊 matchPhrasalVerbWithOcean: No term options found");
+      return null;
+    }
+
+    // Step 6: Sort termOptions by type: lemma → inflected → phrasal verbs
+    // Order: single word (lemma) first, then inflected forms, then phrasal verbs
+    termOptions.sort((a, b) => {
+      // Define priority: single word (lemma) = 0, inflected = 1, phrasal = 2
+      const getPriority = (term) => {
+        if (term.type === 'phrasal') return 2;
+        if (term.type === 'single' && term.term === lemmatizedWord) return 0; // lemma first
+        if (term.type === 'single') return 1; // inflected form second
+        return 3; // fallback
+      };
+      
+      const priorityA = getPriority(a);
+      const priorityB = getPriority(b);
+      
+      return priorityA - priorityB;
+    });
+
+    // Step 7: Get primary term (highest score)
+    const primaryTerm = termOptions[0];
+    const primaryData = primaryTerm.data;
+
+    console.log(`🌊 matchPhrasalVerbWithOcean: ✓ Returning ${termOptions.length} term options`);
+    console.log(`   Primary term: "${primaryTerm.term}" (type: ${primaryTerm.type}, score: ${primaryTerm.score})`);
+
+    // Return combined result with proper structure
     return {
-      term: data.displayTerm || data.term,
-      pronunciation: data.pronunciation || "",
-      definition: fullPhrasalHtml,
-      isPhrasal: true,
-      originalTerm: data.term,
-      detectedPhrase: data.detectedInSentence,
+      term: primaryTerm.term,
+      pronunciation: primaryData.pronunciation || "",
+      definition: primaryData.definition || "",
+      isPhrasal: primaryData.isPhrasal || false,
+      originalTerm: primaryData.originalTerm || null,
+      detectedPhrase: primaryData.detectedPhrase || null,
       sentence: completeSentence,
-      frequency: null,  // Phrasal verbs don't have frequency
+      frequency: primaryData.frequency || null,
+      freqs: primaryData.freqs || [],
+      originalWord: primaryData.originalWord || null,
       _showSentence: true,
       _showTranslation: true,
       _imagesEnabled: true,
-      // Term options for term selector
+      // Term options for term selector (up to 7: 5 phrasal + 2 single word)
       termOptions: termOptions,
       hasMultipleTerms: termOptions.length > 1
     };
@@ -1819,7 +1719,10 @@ function renderOtherDictionaries(popup, data, popupCfg) {
 }
 
 function buildAnkiPayload(dataOfCard, popup) {
-  const payload = { ...dataOfCard };
+  // Get current term data from termOptions if available (more reliable than popup._cardData)
+  const currentTermData = popup?._termOptions?.[popup?._activeTermIndex ?? 0]?.data || dataOfCard;
+  
+  const payload = { ...currentTermData };
   const blocks = popup?._definitionBlocks || [];
   const selectedDefIdx = popup?._state?.selectedDefinitions
     ? Array.from(popup._state.selectedDefinitions.values()).sort((a, b) => a - b)
@@ -1834,34 +1737,49 @@ function buildAnkiPayload(dataOfCard, popup) {
     .join("<br>");
   if (definitionHtml) payload.definition = definitionHtml;
 
-  const selectedImageIdx = popup?._state?.selectedImages
-    ? Array.from(popup._state.selectedImages.values()).sort((a, b) => a - b)
-    : [];
-  const imageUrls = selectedImageIdx.length > 0
-    ? selectedImageIdx.map((idx) => popup._allImageUrls?.[idx]).filter(Boolean)
-    : (() => {
-      const focus = popup?._state?.focusedImageIndex ?? 0;
-      const url = popup?._allImageUrls?.[focus];
-      return url ? [url] : [];
-    })();
+  // Get images - use current term's image URLs if available
+  const imageUrls = (() => {
+    const selectedImageIdx = popup?._state?.selectedImages
+      ? Array.from(popup._state.selectedImages.values()).sort((a, b) => a - b)
+      : [];
+    
+    if (selectedImageIdx.length > 0) {
+      return selectedImageIdx.map((idx) => popup._allImageUrls?.[idx]).filter(Boolean);
+    }
+    
+    // Use focused image
+    const focus = popup?._state?.focusedImageIndex ?? 0;
+    const url = popup?._allImageUrls?.[focus];
+    return url ? [url] : [];
+  })();
   if (imageUrls.length > 0) {
     payload.images = imageUrls;
     payload.image = imageUrls[0];
   }
 
-  const selectedAudioIdx = popup?._state?.selectedAudios
-    ? Array.from(popup._state.selectedAudios.values()).sort((a, b) => a - b)
-    : [];
-  const audioUrls = selectedAudioIdx.length > 0
-    ? selectedAudioIdx.map((idx) => popup._audioFullList?.[idx]?.url).filter(Boolean)
-    : (() => {
-      const focus = popup?._state?.focusedAudioIndex ?? 0;
-      const url = popup?._audioFullList?.[focus]?.url;
-      return url ? [url] : [];
-    })();
+  // Get audio - use current term's audio list if available
+  const audioUrls = (() => {
+    const selectedAudioIdx = popup?._state?.selectedAudios
+      ? Array.from(popup._state.selectedAudios.values()).sort((a, b) => a - b)
+      : [];
+    
+    if (selectedAudioIdx.length > 0) {
+      return selectedAudioIdx.map((idx) => popup._audioFullList?.[idx]?.url).filter(Boolean);
+    }
+    
+    // Use focused audio
+    const focus = popup?._state?.focusedAudioIndex ?? 0;
+    const url = popup?._audioFullList?.[focus]?.url;
+    return url ? [url] : [];
+  })();
   if (audioUrls.length > 0) {
     payload.audioList = audioUrls;
     payload.audio = audioUrls[0];
+  }
+
+  // Ensure originalWord is set (important for phrasal verbs)
+  if (!payload.originalWord && currentTermData.originalWord) {
+    payload.originalWord = currentTermData.originalWord;
   }
 
   return payload;
@@ -2241,15 +2159,42 @@ async function showPopup(x, y, data, level) {
     selectedAudios: new Set(),
   };
   newPopup._cardData = data;
-  const userCfgRes = await fetchUserConfig();
-  const popupCfg = userCfgRes?.config || {};
-  const featureState = resolvePopupFeatures(data, popupCfg);
-  newPopup._availableFeatures = featureState.available.slice();
-  newPopup._activeFeature = featureState.initial;
-  newPopup._audioAutoPlayOnNavigate = popupCfg?.forvo?.autoplayOnNavigate === true;
-  newPopup._ttsAutoPlayOnNavigate = (popupCfg?.tts?.autoplayCount || 0) > 0;
+  
+  // Load config and size in parallel (non-blocking)
+  // Use default config immediately, update later when ready
+  let popupCfg = {};
+  let featureState = null;
+  let savedSize = null;
+  
+  // Start loading config, size, and Anki data in parallel (background)
+  const configPromise = fetchUserConfig().then(res => {
+    popupCfg = res?.config || {};
+    featureState = resolvePopupFeatures(data, popupCfg);
+    newPopup._availableFeatures = featureState.available.slice();
+    newPopup._activeFeature = featureState.initial;
+    newPopup._audioAutoPlayOnNavigate = popupCfg?.forvo?.autoplayOnNavigate === true;
+    newPopup._ttsAutoPlayOnNavigate = (popupCfg?.tts?.autoplayCount || 0) > 0;
+    return popupCfg;
+  });
+  
+  const sizePromise = loadPopupSize().then(size => {
+    savedSize = size;
+    return size;
+  });
+  
+  // Use default feature state immediately (will be updated when config loads)
+  if (!featureState) {
+    featureState = {
+      available: ['forvo', 'images', 'tts', 'sentence', 'other'],
+      initial: 'forvo',
+      sentenceVisible: true
+    };
+    newPopup._availableFeatures = featureState.available.slice();
+    newPopup._activeFeature = featureState.initial;
+    newPopup._audioAutoPlayOnNavigate = false;
+    newPopup._ttsAutoPlayOnNavigate = false;
+  }
   newPopup._state.selectedTts = new Set();
-  const savedSize = await loadPopupSize();
   const sentenceHtml = featureState.sentenceVisible
     ? `<div class="yomi-sentence-text">${escapeHtml(data.sentence || "")}</div>
        ${data._showTranslation !== false && data.sentenceTranslation
@@ -2339,84 +2284,47 @@ async function showPopup(x, y, data, level) {
         <div class="yomi-resizer"></div>
     `;
 
+  // Set initial position to hide popup until positioning is calculated
+  newPopup.style.visibility = "hidden";
+  newPopup.style.left = "0px";
+  newPopup.style.top = "0px";
+
   const targetContainer = document.fullscreenElement || document.body;
   targetContainer.appendChild(newPopup);
 
-  if (savedSize?.width) newPopup.style.width = `${savedSize.width}px`;
-  if (savedSize?.height) newPopup.style.height = `${savedSize.height}px`;
+  // --- POSITION POPUP (viewport anti-overflow algorithm) ---
+  // Position after popup is added to DOM and rendered
+  // Use double requestAnimationFrame to ensure layout is fully calculated
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      const popupWidth = newPopup.offsetWidth || 320;
+      const popupHeight = newPopup.offsetHeight || 400;
+      const viewWidth = window.innerWidth;
+      const viewHeight = window.innerHeight;
 
-  // Get button references
-  const addBtn = newPopup.querySelector(".yomi-add-anki-btn");
-  const updateBtn = newPopup.querySelector(".yomi-update-anki-btn");
+      let finalX = x + 10;
+      let finalY = y + 20;
 
-  // Gắn sự kiện Add to Anki TRƯỚC KHI disable
-  if (addBtn) {
-    addBtn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      const payload = buildAnkiPayload(data, newPopup);
-      addNoteToAnki(payload, newPopup);
-    });
-  }
-
-  // Check Anki connection and configure Add button
-  const ankiConnected = await checkAnkiConnection();
-
-  // Hide Update button initially (only show after successful Add or when note exists)
-  if (updateBtn) {
-    updateBtn.style.display = "none";
-  }
-
-  if (!ankiConnected) {
-    // Anki not connected - hide Add button
-    if (addBtn) {
-      addBtn.style.display = "none";
-    }
-  } else {
-    // Anki connected - check allowDuplicate and existing notes
-    const ankiConfig = await loadAnkiUIConfig();
-    const checkResult = await autoCheckAnkiOnOpen(newPopup, data, ankiConfig);
-
-    if (addBtn) {
-      if (!checkResult.shouldShowAddButton) {
-        addBtn.style.display = "none";
-      } else {
-        addBtn.disabled = !checkResult.shouldEnableAddButton;
-        if (!checkResult.shouldEnableAddButton) {
-          addBtn.title = "Note already exists in Anki";
-        }
+      // Adjust X position if popup goes off right edge
+      if (finalX + popupWidth > viewWidth) {
+        finalX = x - popupWidth - 10;
       }
-    }
+      // Ensure X doesn't go off left edge
+      if (finalX < 5) finalX = 5;
 
-    // Show Update button if note exists (single note case)
-    if (checkResult.shouldShowUpdateButton && updateBtn) {
-      ensureUpdateButton(newPopup, () => {
-        const payload = buildAnkiPayload(data, newPopup);
-        updateExistingAnkiCard(payload, newPopup._selectedNoteId, newPopup);
-      });
-    }
+      // Adjust Y position if popup goes off bottom edge
+      if (finalY + popupHeight > viewHeight) {
+        finalY = y - popupHeight - 20;
+      }
+      // Ensure Y doesn't go off top edge
+      if (finalY < 5) finalY = 5;
 
-    // Show Update button for multiple notes case
-    if (checkResult.noteIds && checkResult.noteIds.length > 1 && updateBtn) {
-      ensureUpdateButton(newPopup, async () => {
-        const payload = buildAnkiPayload(data, newPopup);
-
-        // Check if user selected specific notes
-        if (newPopup._selectedNotesForUpdate && newPopup._selectedNotesForUpdate.length > 0) {
-          // Update only selected notes
-          const count = newPopup._selectedNotesForUpdate.length;
-          if (confirm(`Bạn có chắc muốn update ${count} note${count !== 1 ? "s" : ""} đã chọn?`)) {
-            await updateMultipleNotes(newPopup, newPopup._selectedNotesForUpdate, payload);
-          }
-        } else {
-          // Update all notes
-          const count = checkResult.noteIds.length;
-          if (confirm(`Bạn có chắc muốn update tất cả ${count} notes?`)) {
-            await updateMultipleNotes(newPopup, checkResult.noteIds, payload);
-          }
-        }
-      });
-    }
-  }
+      newPopup.style.left = `${finalX}px`;
+      newPopup.style.top = `${finalY}px`;
+      newPopup.style.visibility = "visible";
+      newPopup.style.zIndex = (10000 + level).toString();
+    });
+  });
 
   renderFeatureToolbar(newPopup);
   setActiveFeature(newPopup, newPopup._activeFeature);
@@ -2438,8 +2346,6 @@ async function showPopup(x, y, data, level) {
     newPopup._activeTermIndex = 0;
     renderTermSelector(newPopup, data.termOptions);
   }
-
-  // 4. ĐI LẤY DỮ LIỆU THẬT (Bất đồng bộ)
   const audioContainer = newPopup.querySelector(".yomi-audio-list");
   const forvoHead = newPopup.querySelector(".yomi-forvo-head");
   const forvoActions = newPopup.querySelector(".yomi-forvo-actions");
@@ -2447,6 +2353,7 @@ async function showPopup(x, y, data, level) {
   const playFocusBtn = newPopup.querySelector(".yomi-forvo-play");
   const playAllBtn = newPopup.querySelector(".yomi-forvo-play-all");
   const moreBtn = newPopup.querySelector(".yomi-forvo-more");
+  
   if (playFocusBtn) {
     playFocusBtn.onclick = () => {
       const idx = Number(newPopup._state.focusedAudioIndex || 0);
@@ -2456,11 +2363,9 @@ async function showPopup(x, y, data, level) {
   if (playAllBtn) {
     playAllBtn.onclick = async () => {
       if (newPopup._isPlayingSequence) {
-        // Stop playback
         stopAllAudios(newPopup);
         playAllBtn.textContent = "Play all";
       } else {
-        // Start sequential playback
         playAllBtn.textContent = "Stop";
         const total = newPopup._audioFullList?.length || 0;
         const count = Math.min(3, total);
@@ -2481,258 +2386,120 @@ async function showPopup(x, y, data, level) {
     };
   }
 
-  function loadForvoAudio() {
-    if (!audioContainer) return;
-    audioContainer.innerHTML = `<div class="yomi-feature-placeholder">Loading...</div>`;
+  // Setup image controls
+  const gallery = newPopup.querySelector(".yomi-image-gallery");
+  const loadMoreBtn = newPopup.querySelector(".yomi-load-more-img");
+  newPopup._allImageUrls = [];
 
-    fetchAudioFromForvo(data.term).then((realData) => {
-      const processed = processAudioList(realData);
+  if (loadMoreBtn) {
+    loadMoreBtn.onclick = () => {
+      // Will be set up by loadMediaInParallel
+    };
+  }
 
-      if (processed.fullList && processed.fullList.length > 0) {
-        newPopup._audioFullList = processed.fullList;
-        data.audio = newPopup._audioFullList?.[0]?.url;
-        newPopup._audioWindowStart = 0;
-        renderAudioGroup(newPopup);
+  // Get button references
+  const addBtn = newPopup.querySelector(".yomi-add-anki-btn");
+  const updateBtn = newPopup.querySelector(".yomi-update-anki-btn");
 
-        // Cache audio data for initial term (index 0)
-        if (newPopup._termDataCache && newPopup._termDataCache[0]) {
-          newPopup._termDataCache[0].audioList = processed.fullList;
-        }
-
-        const autoCount = Math.min(
-          AudioConfig.autoPlayCount || 0,
-          3,
-          newPopup._audioFullList.length || 0,
-        );
-        if (autoCount > 0) {
-          setTimeout(() => {
-            playMultipleAudios(newPopup, autoCount);
-          }, 260);
-        }
-      } else {
-        // Try to get TTS voices from config first
-        const ttsRows = getTtsVoiceRows(popupCfg.tts || {});
-
-        if (ttsRows.length > 0) {
-          // Use configured TTS voices
-          newPopup._audioFullList = ttsRows.map((row) => ({
-            url: "",
-            ttsVoiceName: row.voiceName,
-            speaker: row.voiceName,
-            region: row.lang || "TTS",
-          }));
-          newPopup._audioWindowStart = 0;
-          renderAudioGroup(newPopup);
-
-          // Auto-play first TTS voice as fallback
-          setTimeout(() => {
-            const text = data.term || "";
-            if (text && ttsRows[0]?.voiceName) {
-              chrome.runtime.sendMessage({
-                action: "speakLocal",
-                text,
-                voiceName: ttsRows[0].voiceName,
-              });
-            }
-          }, 260);
-        } else {
-          // Fallback: Use browser's built-in TTS voices
-          chrome.runtime.sendMessage({ action: "getAvailableVoices" }, (response) => {
-            const voices = response?.voices || [];
-            const englishVoices = voices.filter(v => v.lang && v.lang.startsWith('en'));
-
-            if (englishVoices.length > 0) {
-              // Use first English voice
-              const voice = englishVoices[0];
-              newPopup._audioFullList = [{
-                url: "",
-                ttsVoiceName: voice.name,
-                speaker: voice.name,
-                region: voice.lang || "TTS",
-              }];
-              newPopup._audioWindowStart = 0;
-              renderAudioGroup(newPopup);
-
-              // Auto-play
-              setTimeout(() => {
-                const text = data.term || "";
-                if (text) {
-                  chrome.runtime.sendMessage({
-                    action: "speakLocal",
-                    text,
-                    voiceName: voice.name,
-                  });
-                }
-              }, 260);
-            } else {
-              // No voices available at all
-              audioContainer.innerHTML = `<div class="yomi-feature-placeholder">No audio</div>`;
-            }
-          });
-        }
-      }
+  // Gắn sự kiện Add to Anki TRƯỚC KHI disable
+  if (addBtn) {
+    addBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const payload = buildAnkiPayload(data, newPopup);
+      addNoteToAnki(payload, newPopup);
     });
   }
 
-  if (!featureState.forvoVisible || !AudioConfig.forvoEnabled) {
-    if (audioContainer) audioContainer.innerHTML = `<div class="yomi-feature-placeholder">Forvo disabled</div>`;
-    if (forvoHead) forvoHead.style.display = "none";
-    if (moreRow) moreRow.style.display = "none";
-    newPopup._audioFullList = [];
-    newPopup._audioVisibleCount = 0;
-  } else if (AudioConfig.forvoMode === "manual") {
-    if (forvoHead) forvoHead.style.display = "flex";
-    if (moreRow) moreRow.style.display = "none";
-    if (audioContainer) {
-      audioContainer.innerHTML = `<button class="yomi-forvo-load yomi-load-more" title="Load audio [${getShortcutLabel("audioNext")}]">Load audio</button>`;
-      const btn = audioContainer.querySelector(".yomi-forvo-load");
-      if (btn) {
-        btn.onclick = (e) => {
-          e.stopPropagation();
-          loadForvoAudio();
-        };
+  // Hide Update button initially (only show after successful Add or when note exists)
+  if (updateBtn) {
+    updateBtn.style.display = "none";
+  }
+
+  // Check Anki connection in background (non-blocking)
+  // Buttons will be updated when Anki check completes
+  checkAnkiConnection().then(ankiConnected => {
+    if (!ankiConnected) {
+      // Anki not connected - hide Add button
+      if (addBtn) {
+        addBtn.style.display = "none";
       }
-    }
-  } else {
-    if (forvoHead) forvoHead.style.display = "flex";
-    if (moreRow) moreRow.style.display = "flex";
-    loadForvoAudio();
-  }
+    } else {
+      // Anki connected - check allowDuplicate and existing notes
+      loadAnkiUIConfig().then(ankiConfig => {
+        autoCheckAnkiOnOpen(newPopup, data, ankiConfig).then(checkResult => {
+          if (addBtn) {
+            if (!checkResult.shouldShowAddButton) {
+              addBtn.style.display = "none";
+            } else {
+              addBtn.disabled = !checkResult.shouldEnableAddButton;
+              if (!checkResult.shouldEnableAddButton) {
+                addBtn.title = "Note already exists in Anki";
+              }
+            }
+          }
 
-  // --- GIẢI THUẬT TÍNH VỊ TRÍ CHỐNG TRÀN (viewport, fixed) ---
-  const popupWidth = 320;
-  const popupHeight = newPopup.offsetHeight || 400;
-  const viewWidth = window.innerWidth;
-  const viewHeight = window.innerHeight;
+          // Show Update button if note exists (single note case)
+          if (checkResult.shouldShowUpdateButton && updateBtn) {
+            ensureUpdateButton(newPopup, () => {
+              const payload = buildAnkiPayload(data, newPopup);
+              updateExistingAnkiCard(payload, newPopup._selectedNoteId, newPopup);
+            });
+          }
 
-  let finalX = x + 10; // lệch phải 10px so với điểm trỏ
-  let finalY = y + 20; // lệch xuống 20px
+          // Show Update button for multiple notes case
+          if (checkResult.noteIds && checkResult.noteIds.length > 1 && updateBtn) {
+            ensureUpdateButton(newPopup, async () => {
+              const payload = buildAnkiPayload(data, newPopup);
 
-  // Tràn phải -> lật sang trái
-  if (finalX + popupWidth > viewWidth) {
-    finalX = x - popupWidth - 10;
-  }
-  // Tràn trái
-  if (finalX < 5) finalX = 5;
-
-  // Tràn dưới -> lật lên trên
-  if (finalY + popupHeight > viewHeight) {
-    finalY = y - popupHeight - 20;
-  }
-  // Tràn trên
-  if (finalY < 5) finalY = 5;
-
-  newPopup.style.left = `${finalX}px`;
-  newPopup.style.top = `${finalY}px`;
-  newPopup.style.visibility = "visible"; // Hiển thị lại sau khi đã căn chỉnh
-  newPopup.style.zIndex = (10000 + level).toString();
-
-  //-----------------------
-  // --- ĐOẠN THÊM MỚI: Ảnh ---
-  if (featureState.imageVisible) {
-    let allImageUrls = [];
-    let remainingUrls = [];
-    let loadedUrls = [];
-    let failedAttempts = 0;
-    const gallery = newPopup.querySelector(".yomi-image-gallery");
-    const loadMoreBtn = newPopup.querySelector(".yomi-load-more-img");
-    newPopup._allImageUrls = [];
-    const maxLinks = Math.min(20, Math.max(5, Number(popupCfg?.image?.maxLinks) || 20));
-    const autoLoadCount = Math.min(5, Math.max(1, Number(popupCfg?.image?.autoLoadCount) || 3));
-    const retryLimit = Math.min(10, Math.max(0, Number(popupCfg?.image?.retryLimit) ?? 5));
-
-    function reindexImages() {
-      gallery.querySelectorAll(".yomi-thumb-wrap").forEach((wrap, idx) => {
-        wrap.setAttribute("data-image-index", String(idx));
+              // Check if user selected specific notes
+              if (newPopup._selectedNotesForUpdate && newPopup._selectedNotesForUpdate.length > 0) {
+                // Update only selected notes
+                const count = newPopup._selectedNotesForUpdate.length;
+                if (confirm(`Bạn có chắc muốn update ${count} note${count !== 1 ? "s" : ""} đã chọn?`)) {
+                  await updateMultipleNotes(newPopup, newPopup._selectedNotesForUpdate, payload);
+                }
+              } else {
+                // Update all notes
+                const count = checkResult.noteIds.length;
+                if (confirm(`Bạn có chắc muốn update tất cả ${count} notes?`)) {
+                  await updateMultipleNotes(newPopup, checkResult.noteIds, payload);
+                }
+              }
+            });
+          }
+        });
       });
     }
+  });
 
-    function updateMoreButton() {
-      if (!loadMoreBtn) return;
-      const remaining = remainingUrls.length;
-      if (remaining > 0) {
-        loadMoreBtn.textContent = `More images (+${remaining})`;
-        loadMoreBtn.style.display = "inline-flex";
-      } else {
-        loadMoreBtn.style.display = "none";
-      }
+
+
+  // Update UI when config loads (background)
+  configPromise.then(cfg => {
+    // Update TTS group with actual config
+    renderPopupTtsGroup(newPopup, data.sentence || "", cfg.tts || {});
+    
+    // Update feature state with new config
+    const newFeatureState = resolvePopupFeatures(data, cfg);
+    newPopup._availableFeatures = newFeatureState.available.slice();
+    newPopup._activeFeature = newFeatureState.initial;
+    
+    // Update feature toolbar if features changed
+    if (newPopup._availableFeatures.length > 0) {
+      renderFeatureToolbar(newPopup);
+      // Update active feature based on config
+      setActiveFeature(newPopup, newPopup._activeFeature);
     }
+    
+    // Update other dictionaries with actual config
+    renderOtherDictionaries(newPopup, data, cfg);
+  });
 
-    function appendImage(url, targetCount) {
-      const wrap = document.createElement("div");
-      wrap.className = "yomi-thumb-wrap";
-      const img = document.createElement("img");
-      img.src = url;
-      img.className = "yomi-thumb";
-      img.title = `Image [${getShortcutLabel("imageNext")}/${getShortcutLabel("imagePrev")}] • Select [${getShortcutLabel("imageSelect")}]`;
-
-      wrap.onclick = () => {
-        const index = Number(wrap.getAttribute("data-image-index"));
-        newPopup._state.focusedImageIndex = index;
-        toggleFocusedImageSelection(newPopup);
-      };
-
-      img.onload = () => {
-        loadedUrls.push(url);
-        newPopup._allImageUrls = loadedUrls.slice();
-        wrap.appendChild(img);
-        gallery.appendChild(wrap);
-        reindexImages();
-        applyImageFocus(newPopup);
-        
-        // Cache image data for initial term (index 0)
-        if (newPopup._termDataCache && newPopup._termDataCache[0]) {
-          newPopup._termDataCache[0].imageUrls = loadedUrls.slice();
-        }
-        
-        loadUntil(targetCount);
-      };
-
-      img.onerror = () => {
-        failedAttempts += 1;
-        loadUntil(targetCount);
-      };
-    }
-
-    function loadUntil(targetCount) {
-      if (loadedUrls.length >= targetCount) {
-        updateMoreButton();
-        return;
-      }
-      if (remainingUrls.length === 0) {
-        updateMoreButton();
-        return;
-      }
-      if (failedAttempts >= retryLimit) {
-        updateMoreButton();
-        return;
-      }
-      const url = remainingUrls.shift();
-      appendImage(url, targetCount);
-    }
-
-    runtimeMessageWithTimeout({ action: "fetchImages", term: data.term, maxLinks }, 5000)
-      .then((res) => {
-        if (res && res.success && Array.isArray(res.urls) && res.urls.length > 0) {
-          allImageUrls = res.urls.slice(0, maxLinks);
-          remainingUrls = allImageUrls.slice();
-          loadUntil(autoLoadCount);
-        } else {
-          gallery.innerHTML = "";
-          updateMoreButton();
-        }
-      })
-      .catch(() => {
-        gallery.innerHTML = "";
-        updateMoreButton();
-      });
-
-    if (loadMoreBtn) {
-      loadMoreBtn.onclick = () => loadUntil(loadedUrls.length + autoLoadCount);
-    }
-  } else {
-    newPopup._allImageUrls = [];
-  }
+  // Apply saved size when ready
+  sizePromise.then(size => {
+    if (size?.width) newPopup.style.width = `${size.width}px`;
+    if (size?.height) newPopup.style.height = `${size.height}px`;
+  });
 
   // Resize handle
   const resizer = newPopup.querySelector(".yomi-resizer");
@@ -2770,6 +2537,249 @@ async function showPopup(x, y, data, level) {
 
   popupStack.push(newPopup);
   activePopup = newPopup;
+
+  // Start loading media in parallel (non-blocking)
+  // This will update the popup when media is ready
+  loadMediaInParallel(data, newPopup, featureState, popupCfg);
+
+  // Return popup element
+  return newPopup;
+}
+
+/**
+ * Load media (audio, images, translation) in parallel with timeout
+ * 
+ * This function loads media asynchronously without blocking popup display.
+ * It handles timeouts gracefully and updates the popup when media is ready.
+ * 
+ * Loads three types of media in parallel:
+ * - Forvo audio for the term
+ * - Images for the term
+ * - Translation of the sentence
+ * 
+ * All requests must complete within 10 seconds total. Partial results are
+ * accepted (e.g., audio succeeds but images timeout). Errors are collected
+ * in the MediaData.errors array rather than thrown.
+ * 
+ * @param {Object} data - Popup data with term and context
+ * @param {HTMLElement} popup - Popup element to update
+ * @param {Object} featureState - Feature visibility state
+ * @param {Object} popupCfg - Popup configuration
+ * @returns {Promise<Object>} MediaData object with audio, images, translation, errors
+ */
+async function loadMediaInParallel(data, popup, featureState, popupCfg) {
+  // Check if user has disabled auto-fetch in settings
+  // If popupCfg is not provided, fetch it
+  if (!popupCfg) {
+    const configRes = await fetchUserConfig();
+    popupCfg = configRes?.config || {};
+  }
+  
+  // Check if auto-fetch is disabled
+  const autoFetchEnabled = popupCfg.popup?.autoFetch !== false; // Default: enabled
+  if (!autoFetchEnabled) {
+    console.log("Auto-fetch disabled in settings, skipping media loading");
+    return {
+      audio: [],
+      images: [],
+      translation: "",
+      errors: []
+    };
+  }
+
+  const timeoutMs = 3000; // 3 seconds total timeout for Forvo audio, then fallback to TTS
+  const startTime = Date.now();
+  const errors = [];
+  
+  // Helper function to create a timeout promise
+  const createTimeoutPromise = (ms) => {
+    return new Promise((_, reject) => {
+      setTimeout(() => reject(new Error("Timeout")), ms);
+    });
+  };
+  
+  // Helper function to wrap a promise with timeout
+  const withTimeout = (promise, ms) => {
+    return Promise.race([promise, createTimeoutPromise(ms)]);
+  };
+  
+  try {
+    // Start all three media requests in parallel
+    const audioPromise = fetchAudioFromForvo(data.term)
+      .catch(err => {
+        console.error("Audio fetch error:", err);
+        errors.push({ source: "audio", message: err.message });
+        return null;
+      });
+    
+    const imagePromise = runtimeMessageWithTimeout(
+      { action: "fetchImages", term: data.term, maxLinks: 20 },
+      5000
+    )
+      .then(res => {
+        if (res && res.success && Array.isArray(res.urls)) {
+          return res.urls;
+        }
+        return null;
+      })
+      .catch(err => {
+        console.error("Image fetch error:", err);
+        errors.push({ source: "images", message: err.message });
+        return null;
+      });
+    
+    const translationPromise = new Promise((resolve) => {
+      chrome.runtime.sendMessage(
+        { action: "translateSentence", text: data.sentence || data.term },
+        (response) => {
+          if (response && response.success) {
+            resolve(response.text || "");
+          } else {
+            resolve("");
+          }
+        }
+      );
+    })
+      .catch(err => {
+        console.error("Translation fetch error:", err);
+        errors.push({ source: "translation", message: err.message });
+        return "";
+      });
+    
+    // Wait for all requests with overall timeout
+    const [audioData, imageUrls, translation] = await Promise.race([
+      Promise.all([audioPromise, imagePromise, translationPromise]),
+      createTimeoutPromise(timeoutMs)
+    ]);
+    
+    // Process audio data
+    let audio = [];
+    if (audioData) {
+      const processed = processAudioList(audioData);
+      audio = processed.fullList || [];
+    }
+    
+    // Process image URLs
+    let images = [];
+    if (imageUrls && Array.isArray(imageUrls)) {
+      images = imageUrls.slice(0, 20); // Limit to 20 images
+    }
+    
+    // Create MediaData object
+    const mediaData = {
+      audio: audio,
+      images: images,
+      translation: translation || "",
+      errors: errors
+    };
+    
+    // Update popup with media data
+    updatePopupWithMediaData(popup, mediaData);
+    
+    return mediaData;
+    
+  } catch (error) {
+    // Handle timeout or other errors
+    console.error("Media loading error:", error);
+    
+    if (error.message === "Timeout") {
+      errors.push({ source: "timeout", message: "Media load timeout after 10s" });
+    } else {
+      errors.push({ source: "unknown", message: error.message });
+    }
+    
+    const mediaData = {
+      audio: [],
+      images: [],
+      translation: "",
+      errors: errors
+    };
+    
+    // Update popup with partial/empty media data
+    updatePopupWithMediaData(popup, mediaData);
+    
+    return mediaData;
+  }
+}
+
+/**
+ * Update popup with loaded media data
+ * 
+ * Updates the popup DOM with media that has been loaded. Handles:
+ * - Audio group rendering
+ * - Image gallery rendering
+ * - Translation display
+ * - Error message display
+ * 
+ * @param {HTMLElement} popup - Popup element to update
+ * @param {Object} mediaData - Media data object with audio, images, translation, errors
+ * @returns {void}
+ */
+function updatePopupWithMediaData(popup, mediaData) {
+  if (!popup || !mediaData) return;
+  
+  // Update audio group
+  if (mediaData.audio && mediaData.audio.length > 0) {
+    popup._audioFullList = mediaData.audio;
+    popup._audioWindowStart = 0;
+    renderAudioGroup(popup);
+  }
+  
+  // Update image gallery
+  if (mediaData.images && mediaData.images.length > 0) {
+    const gallery = popup.querySelector(".ocean-image-gallery");
+    if (gallery) {
+      gallery.innerHTML = ""; // Clear placeholder
+      
+      popup._allImageUrls = mediaData.images;
+      
+      mediaData.images.forEach((url, idx) => {
+        const wrap = document.createElement("div");
+        wrap.className = "yomi-thumb-wrap";
+        wrap.setAttribute("data-image-index", String(idx));
+        
+        const img = document.createElement("img");
+        img.src = url;
+        img.className = "yomi-thumb";
+        img.title = `Image [${getShortcutLabel("imageNext")}/${getShortcutLabel("imagePrev")}] • Select [${getShortcutLabel("imageSelect")}]`;
+        
+        // Remove broken images from display
+        img.onerror = () => {
+          wrap.remove();
+        };
+        
+        wrap.onclick = () => {
+          popup._state.focusedImageIndex = idx;
+          toggleFocusedImageSelection(popup);
+        };
+        
+        wrap.appendChild(img);
+        gallery.appendChild(wrap);
+      });
+      
+      applyImageFocus(popup);
+    }
+  }
+  
+  // Update translation (if available)
+  if (mediaData.translation) {
+    const sentenceTranslation = popup.querySelector(".yomi-sentence-translation");
+    if (sentenceTranslation) {
+      sentenceTranslation.textContent = mediaData.translation;
+    }
+  }
+  
+  // Display error messages
+  if (mediaData.errors && mediaData.errors.length > 0) {
+    const feedbackBar = popup.querySelector(".yomi-feedback-bar");
+    if (feedbackBar) {
+      const errorMessages = mediaData.errors
+        .map(err => `${err.source}: ${err.message}`)
+        .join("; ");
+      
+      showFeedback(popup, errorMessages, "warning");
+    }
+  }
 }
 
 /**
@@ -2788,12 +2798,27 @@ function renderTermSelector(popup, termOptions) {
 
   const activeIndex = popup._activeTermIndex || 0;
 
-  selector.innerHTML = termOptions
+  // Limit to 5 candidates
+  const displayOptions = termOptions.slice(0, 5);
+
+  selector.innerHTML = displayOptions
     .map((option, idx) => {
       const isActive = idx === activeIndex;
+      
+      // Map type to display label
+      let typeLabel = "single";
+      if (option.type === "phrasal_verb" || option.type === "phrasal") {
+        typeLabel = "phrasal";
+      } else if (option.type === "inflected") {
+        typeLabel = "inflected";
+      }
+      
       return `
         <div class="yomi-term-tab ${isActive ? 'is-active' : ''}" data-term-index="${idx}">
           <div class="yomi-term-tab-name" title="${escapeHtml(option.term)}">${escapeHtml(option.term)}</div>
+          <div class="yomi-term-tab-meta">
+            <span class="yomi-term-type">${escapeHtml(typeLabel)}</span>
+          </div>
         </div>
       `;
     })
@@ -2813,24 +2838,49 @@ function renderTermSelector(popup, termOptions) {
 /**
  * Switch to a different term
  */
+/**
+ * Switch to a different term candidate
+ * 
+ * Handles switching the popup to display a different term from the termOptions array.
+ * Updates the popup content, reloads media for the new term, and updates the term selector highlighting.
+ * 
+ * @param {HTMLElement} popup - Popup element to update
+ * @param {number} termIndex - Index of the term to switch to (0-based)
+ * @returns {Promise<void>}
+ * 
+ * SIDE EFFECTS:
+ *   - Updates popup._activeTermIndex
+ *   - Updates popup content with new term data
+ *   - Reloads media (audio, images, translation) for new term
+ *   - Updates term selector highlighting
+ *   - Updates feature toolbar based on new term data
+ * 
+ * VALIDATION:
+ *   - Validates termIndex is within valid range (0 <= termIndex < termOptions.length)
+ *   - Returns early if termIndex is invalid
+ *   - Returns early if termOptions is not available
+ */
 async function switchToTerm(popup, termIndex) {
+  // Step 1: Validate term index
   const termOptions = popup._termOptions;
   if (!termOptions || termIndex < 0 || termIndex >= termOptions.length) {
+    console.warn(`⚠️ Invalid term index: ${termIndex} (valid range: 0-${termOptions?.length - 1 || 0})`);
     return;
   }
 
+  // Step 2: Get new term data
   const option = termOptions[termIndex];
   const termData = option.data;
 
   console.log(`🔄 Switching to term: "${option.term}" (index: ${termIndex})`);
 
-  // Update active index
+  // Step 3: Update active index
   popup._activeTermIndex = termIndex;
 
-  // Update term selector visual state
+  // Step 4: Update term selector visual state
   renderTermSelector(popup, termOptions);
 
-  // Re-resolve features for the new term data
+  // Step 5: Re-resolve features for the new term data
   const userCfgRes = await fetchUserConfig();
   const popupCfg = userCfgRes?.config || {};
   const featureState = resolvePopupFeatures(termData, popupCfg);
@@ -2841,11 +2891,24 @@ async function switchToTerm(popup, termIndex) {
     popup._activeFeature = featureState.initial;
   }
   
-  // Re-render feature toolbar with updated features
+  // Step 6: Re-render feature toolbar with updated features
   renderFeatureToolbar(popup);
   
-  // Update popup with new term data
+  // Step 7: Update popup with new term data
   await updatePopupWithTermData(popup, termData);
+  
+  // Step 8: Reload media for new term (non-blocking)
+  // Create data object for media loading
+  const mediaLoadData = {
+    term: termData.term || option.term,
+    sentence: termData.sentence || popup._cardData?.sentence || "",
+    fullContext: termData.sentence || popup._cardData?.sentence || ""
+  };
+  
+  // Load media in parallel (non-blocking)
+  loadMediaInParallel(mediaLoadData, popup, featureState, popupCfg);
+  
+  console.log(`✓ Switched to term: "${option.term}"`);
 }
 
 /**
@@ -2877,7 +2940,7 @@ async function updatePopupWithTermData(popup, termData) {
   const frequency = popup.querySelector(".yomi-frequency");
   const originNote = popup.querySelector(".yomi-origin-note");
 
-  if (termTitle) termTitle.textContent = termData.term || "";
+  if (termTitle) termTitle.textContent = escapeHtml(termData.term || "");
   if (pronunciation) pronunciation.textContent = `/${termData.pronunciation || "n/a"}/`;
   
   if (frequency) {
@@ -3040,6 +3103,11 @@ async function updatePopupWithTermData(popup, termData) {
       img.className = "yomi-thumb";
       img.title = `Image [${getShortcutLabel("imageNext")}/${getShortcutLabel("imagePrev")}] • Select [${getShortcutLabel("imageSelect")}]`;
       
+      // Remove broken images from display
+      img.onerror = () => {
+        wrap.remove();
+      };
+      
       wrap.onclick = () => {
         popup._state.focusedImageIndex = idx;
         toggleFocusedImageSelection(popup);
@@ -3079,6 +3147,11 @@ async function updatePopupWithTermData(popup, termData) {
             img.src = url;
             img.className = "yomi-thumb";
             img.title = `Image [${getShortcutLabel("imageNext")}/${getShortcutLabel("imagePrev")}] • Select [${getShortcutLabel("imageSelect")}]`;
+            
+            // Remove broken images from display
+            img.onerror = () => {
+              wrap.remove();
+            };
             
             wrap.onclick = () => {
               popup._state.focusedImageIndex = idx;
@@ -3258,12 +3331,29 @@ async function performLookup(clientX, clientY, closestPopup = null) {
     }
   }
   
-  // KIỂM TRA TRÙNG TỪ
-  const isAlreadyShown = popupStack.some(
-    (p) =>
-      p.querySelector(".popup-term-title").innerText.trim().toLowerCase() ===
-      oceanResult.term.toLowerCase(),
-  );
+  // KIỂM TRA TRÙNG TỪ - Chỉ bỏ qua nếu cả term AND sentence đều giống nhau
+  const isAlreadyShown = popupStack.some((p) => {
+    const existingTerms = p._termOptions || [];
+    const existingMainTerm = p.querySelector(".popup-term-title")?.innerText.trim().toLowerCase();
+    const existingSentence = p._cardData?.sentence?.toLowerCase() || "";
+    
+    // Chỉ bỏ qua nếu CÙNG LÚC:
+    // 1. Term chính giống nhau
+    // 2. Sentence giống nhau
+    const sameMainTerm = existingMainTerm === oceanResult.term.toLowerCase();
+    const sameSentence = existingSentence === sentence;
+    
+    if (sameMainTerm && sameSentence) {
+      console.log("⏭️ Skipping: Same term and sentence already shown");
+      return true;
+    }
+    
+    // Kiểm tra term options - cũng phải cùng sentence
+    return existingTerms.some((opt) => {
+      const sameTermOption = opt.term.toLowerCase() === oceanResult.term.toLowerCase();
+      return sameTermOption && sameSentence;
+    });
+  });
   if (isAlreadyShown) return;
 
   // Khi tìm thấy từ mới, hủy lệnh xóa để "Tiến lên" cấp cao hơn
